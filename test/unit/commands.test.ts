@@ -1,0 +1,124 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+const TEST_HOME = join(tmpdir(), `rlusd-commands-test-${Date.now()}`);
+
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return { ...actual, homedir: () => TEST_HOME };
+});
+
+const { createProgram } = await import("../../src/cli.js");
+const { ensureConfigDir } = await import("../../src/config/config.js");
+
+describe("Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register all top-level commands", () => {
+    const program = createProgram();
+    const commandNames = program.commands.map((c) => c.name());
+
+    expect(commandNames).toContain("config");
+    expect(commandNames).toContain("wallet");
+    expect(commandNames).toContain("balance");
+    expect(commandNames).toContain("gas-balance");
+    expect(commandNames).toContain("send");
+    expect(commandNames).toContain("faucet");
+    expect(commandNames).toContain("xrpl");
+  });
+
+  it("should register xrpl trustline subcommands", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    expect(xrplCmd).toBeDefined();
+
+    const trustlineCmd = xrplCmd!.commands.find((c) => c.name() === "trustline");
+    expect(trustlineCmd).toBeDefined();
+
+    const subcommands = trustlineCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("setup");
+    expect(subcommands).toContain("status");
+    expect(subcommands).toContain("remove");
+  });
+
+  it("should register send command with required options", () => {
+    const program = createProgram();
+    const sendCmd = program.commands.find((c) => c.name() === "send");
+    expect(sendCmd).toBeDefined();
+
+    const optionNames = sendCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--to");
+    expect(optionNames).toContain("--amount");
+    expect(optionNames).toContain("--tag");
+    expect(optionNames).toContain("--memo");
+    expect(optionNames).toContain("--dry-run");
+  });
+
+  it("should register faucet fund subcommand", () => {
+    const program = createProgram();
+    const faucetCmd = program.commands.find((c) => c.name() === "faucet");
+    expect(faucetCmd).toBeDefined();
+
+    const fundCmd = faucetCmd!.commands.find((c) => c.name() === "fund");
+    expect(fundCmd).toBeDefined();
+  });
+
+  it("should register wallet subcommands", () => {
+    const program = createProgram();
+    const walletCmd = program.commands.find((c) => c.name() === "wallet");
+    expect(walletCmd).toBeDefined();
+
+    const subcommands = walletCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("generate");
+    expect(subcommands).toContain("import");
+    expect(subcommands).toContain("list");
+    expect(subcommands).toContain("address");
+    expect(subcommands).toContain("use");
+  });
+
+  it("should register config subcommands", () => {
+    const program = createProgram();
+    const configCmd = program.commands.find((c) => c.name() === "config");
+    expect(configCmd).toBeDefined();
+
+    const subcommands = configCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("get");
+    expect(subcommands).toContain("set");
+  });
+
+  it("should register balance command with options", () => {
+    const program = createProgram();
+    const balanceCmd = program.commands.find((c) => c.name() === "balance");
+    expect(balanceCmd).toBeDefined();
+
+    const optionNames = balanceCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--chain");
+    expect(optionNames).toContain("--all");
+    expect(optionNames).toContain("--address");
+  });
+});
+
+const { detectChainFromAddress } = await import("../../src/utils/address.js");
+
+describe("Send Command Address Detection", () => {
+  it("should detect XRPL chain from r-address", () => {
+    expect(detectChainFromAddress("rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De")).toBe("xrpl");
+  });
+
+  it("should detect EVM chain from 0x-address", () => {
+    expect(detectChainFromAddress("0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD")).toBe("ethereum");
+  });
+
+  it("should return null for invalid addresses", () => {
+    expect(detectChainFromAddress("invalid")).toBeNull();
+  });
+});
