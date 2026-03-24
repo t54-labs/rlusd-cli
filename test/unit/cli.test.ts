@@ -12,31 +12,37 @@ describe("CLI Program", () => {
     expect(program.version()).toBe("0.1.0");
   });
 
-  it("should accept --output option", () => {
+  it("should accept --output option on a subcommand", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--output", "json"], { from: "user" });
+    program.parse(["--output", "json", "config", "get"], { from: "user" });
     expect(program.opts().output).toBe("json");
   });
 
   it("should default --output to table", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse([], { from: "user" });
+    program.parse(["config", "get"], { from: "user" });
     expect(program.opts().output).toBe("table");
   });
 
-  it("should accept --chain option", () => {
+  it("should accept --chain option on a subcommand", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--chain", "xrpl"], { from: "user" });
+    program.parse(["--chain", "xrpl", "config", "get"], { from: "user" });
     expect(program.opts().chain).toBe("xrpl");
   });
 
   it("should accept --verbose flag", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--verbose"], { from: "user" });
+    program.parse(["--verbose", "config", "get"], { from: "user" });
     expect(program.opts().verbose).toBe(true);
+  });
+
+  it("should have config subcommand registered", () => {
+    const program = createProgram();
+    const configCmd = program.commands.find((c) => c.name() === "config");
+    expect(configCmd).toBeDefined();
   });
 });

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { registerConfigCommand } from "./commands/config.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -17,6 +18,8 @@ export function createProgram(): Command {
     .option("--verbose", "show detailed output")
     .allowExcessArguments(true)
     .allowUnknownOption(false);
+
+  registerConfigCommand(program);
 
   return program;
 }
