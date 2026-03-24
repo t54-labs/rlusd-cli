@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerConfigCommand } from "./commands/config.cmd.js";
+import { registerWalletCommand } from "./commands/wallet.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -20,6 +21,7 @@ export function createProgram(): Command {
     .allowUnknownOption(false);
 
   registerConfigCommand(program);
+  registerWalletCommand(program);
 
   return program;
 }
