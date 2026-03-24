@@ -108,6 +108,7 @@ describe("Command Registration", () => {
 });
 
 const { detectChainFromAddress } = await import("../../src/utils/address.js");
+const { CHAINLINK_AGGREGATOR_ABI } = await import("../../src/abi/chainlink-aggregator.js");
 
 describe("Send Command Address Detection", () => {
   it("should detect XRPL chain from r-address", () => {
@@ -120,5 +121,88 @@ describe("Send Command Address Detection", () => {
 
   it("should return null for invalid addresses", () => {
     expect(detectChainFromAddress("invalid")).toBeNull();
+  });
+});
+
+describe("Transaction Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register tx command with status and history subcommands", () => {
+    const program = createProgram();
+    const txCmd = program.commands.find((c) => c.name() === "tx");
+    expect(txCmd).toBeDefined();
+
+    const subcommands = txCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("status");
+    expect(subcommands).toContain("history");
+  });
+
+  it("should register tx history with --limit option", () => {
+    const program = createProgram();
+    const txCmd = program.commands.find((c) => c.name() === "tx");
+    const historyCmd = txCmd!.commands.find((c) => c.name() === "history");
+    expect(historyCmd).toBeDefined();
+
+    const optionNames = historyCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--limit");
+  });
+});
+
+describe("Price & Market Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register price command with --source option", () => {
+    const program = createProgram();
+    const priceCmd = program.commands.find((c) => c.name() === "price");
+    expect(priceCmd).toBeDefined();
+
+    const optionNames = priceCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--source");
+  });
+
+  it("should register market command", () => {
+    const program = createProgram();
+    const marketCmd = program.commands.find((c) => c.name() === "market");
+    expect(marketCmd).toBeDefined();
+  });
+});
+
+describe("Chainlink Aggregator ABI", () => {
+  it("should include latestRoundData function", () => {
+    const fn = CHAINLINK_AGGREGATOR_ABI.find(
+      (item) => item.type === "function" && item.name === "latestRoundData",
+    );
+    expect(fn).toBeDefined();
+  });
+
+  it("should include decimals function", () => {
+    const fn = CHAINLINK_AGGREGATOR_ABI.find(
+      (item) => item.type === "function" && item.name === "decimals",
+    );
+    expect(fn).toBeDefined();
+  });
+
+  it("should have correct output types for latestRoundData", () => {
+    const fn = CHAINLINK_AGGREGATOR_ABI.find(
+      (item) => item.type === "function" && item.name === "latestRoundData",
+    );
+    expect(fn).toBeDefined();
+    if (fn && "outputs" in fn) {
+      expect(fn.outputs).toHaveLength(5);
+    }
   });
 });

@@ -5,6 +5,8 @@ import { registerBalanceCommand } from "./commands/balance.cmd.js";
 import { registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
+import { registerTxCommand } from "./commands/tx.cmd.js";
+import { registerPriceCommand } from "./commands/price.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -29,6 +31,8 @@ export function createProgram(): Command {
   registerBalanceCommand(program);
   registerSendCommand(program);
   registerFaucetCommand(program);
+  registerTxCommand(program);
+  registerPriceCommand(program);
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);
