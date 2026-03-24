@@ -181,6 +181,77 @@ describe("Price & Market Command Registration", () => {
   });
 });
 
+describe("XRPL DEX Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register dex subcommands under xrpl", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const dexCmd = xrplCmd!.commands.find((c) => c.name() === "dex");
+    expect(dexCmd).toBeDefined();
+
+    const subcommands = dexCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("buy");
+    expect(subcommands).toContain("sell");
+    expect(subcommands).toContain("cancel");
+    expect(subcommands).toContain("orderbook");
+  });
+});
+
+describe("XRPL AMM Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register amm subcommands under xrpl", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const ammCmd = xrplCmd!.commands.find((c) => c.name() === "amm");
+    expect(ammCmd).toBeDefined();
+
+    const subcommands = ammCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("info");
+    expect(subcommands).toContain("deposit");
+    expect(subcommands).toContain("withdraw");
+    expect(subcommands).toContain("vote");
+    expect(subcommands).toContain("swap");
+  });
+});
+
+describe("XRPL Pathfind Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register pathfind command under xrpl", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const pathfindCmd = xrplCmd!.commands.find((c) => c.name() === "pathfind");
+    expect(pathfindCmd).toBeDefined();
+
+    const optionNames = pathfindCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--to");
+    expect(optionNames).toContain("--amount");
+  });
+});
+
 describe("Chainlink Aggregator ABI", () => {
   it("should include latestRoundData function", () => {
     const fn = CHAINLINK_AGGREGATOR_ABI.find(

@@ -5,6 +5,9 @@ import { registerBalanceCommand } from "./commands/balance.cmd.js";
 import { registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
+import { registerDexCommand } from "./commands/xrpl/dex.cmd.js";
+import { registerAmmCommand } from "./commands/xrpl/amm.cmd.js";
+import { registerPathfindCommand } from "./commands/xrpl/pathfind.cmd.js";
 import { registerTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
 
@@ -36,6 +39,9 @@ export function createProgram(): Command {
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);
+  registerDexCommand(xrplCmd, program);
+  registerAmmCommand(xrplCmd, program);
+  registerPathfindCommand(xrplCmd, program);
 
   return program;
 }
