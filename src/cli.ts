@@ -12,6 +12,7 @@ import { registerTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
 import { registerApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
+import { registerBridgeCommand } from "./commands/bridge.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -38,6 +39,7 @@ export function createProgram(): Command {
   registerFaucetCommand(program);
   registerTxCommand(program);
   registerPriceCommand(program);
+  registerBridgeCommand(program);
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);
