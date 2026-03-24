@@ -13,7 +13,7 @@ export function registerWalletCommand(program: Command): void {
   walletCmd
     .command("generate")
     .description("Generate a new wallet")
-    .option("-c, --chain <chain>", "target chain: xrpl | ethereum", "xrpl")
+    .option("-c, --chain <chain>", "target chain: xrpl | ethereum")
     .option("--algorithm <algo>", "key algorithm for XRPL: ed25519 | secp256k1", "ed25519")
     .option("--name <name>", "wallet name")
     .option("--password <password>", "encryption password (will prompt if not provided)")
@@ -61,7 +61,7 @@ export function registerWalletCommand(program: Command): void {
   walletCmd
     .command("import")
     .description("Import an existing wallet")
-    .option("-c, --chain <chain>", "target chain: xrpl | ethereum", "xrpl")
+    .option("-c, --chain <chain>", "target chain: xrpl | ethereum")
     .option("--secret <secret>", "XRPL wallet secret/seed")
     .option("--private-key <key>", "EVM private key")
     .option("--mnemonic <phrase>", "BIP-39 mnemonic phrase")

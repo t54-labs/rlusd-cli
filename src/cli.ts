@@ -5,6 +5,7 @@ import { registerBalanceCommand } from "./commands/balance.cmd.js";
 import { registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
+import { registerCompletionCommand } from "./commands/completion.cmd.js";
 import { registerDexCommand } from "./commands/xrpl/dex.cmd.js";
 import { registerAmmCommand } from "./commands/xrpl/amm.cmd.js";
 import { registerPathfindCommand } from "./commands/xrpl/pathfind.cmd.js";
@@ -50,6 +51,8 @@ export function createProgram(): Command {
   const ethCmd = program.command("eth").description("Ethereum / EVM RLUSD token and DeFi commands");
   registerApproveCommand(ethCmd, program);
   registerDefiCommand(ethCmd, program);
+
+  registerCompletionCommand(program);
 
   return program;
 }
