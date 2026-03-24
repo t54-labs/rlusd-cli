@@ -252,6 +252,57 @@ describe("XRPL Pathfind Command Registration", () => {
   });
 });
 
+describe("Ethereum Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register eth command with approve subcommands", () => {
+    const program = createProgram();
+    const ethCmd = program.commands.find((c) => c.name() === "eth");
+    expect(ethCmd).toBeDefined();
+
+    const subcommands = ethCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("approve");
+    expect(subcommands).toContain("allowance");
+    expect(subcommands).toContain("revoke");
+  });
+
+  it("should register eth defi aave subcommands", () => {
+    const program = createProgram();
+    const ethCmd = program.commands.find((c) => c.name() === "eth");
+    const defiCmd = ethCmd!.commands.find((c) => c.name() === "defi");
+    expect(defiCmd).toBeDefined();
+
+    const aaveCmd = defiCmd!.commands.find((c) => c.name() === "aave");
+    expect(aaveCmd).toBeDefined();
+
+    const subcommands = aaveCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("supply");
+    expect(subcommands).toContain("withdraw");
+    expect(subcommands).toContain("borrow");
+    expect(subcommands).toContain("repay");
+    expect(subcommands).toContain("status");
+  });
+});
+
+describe("Aave Pool ABI", () => {
+  it("should include core pool functions", async () => {
+    const { AAVE_POOL_ABI } = await import("../../src/abi/aave-pool.js");
+    const fnNames = AAVE_POOL_ABI.filter((i) => i.type === "function").map((i) => i.name);
+    expect(fnNames).toContain("supply");
+    expect(fnNames).toContain("withdraw");
+    expect(fnNames).toContain("borrow");
+    expect(fnNames).toContain("repay");
+    expect(fnNames).toContain("getUserAccountData");
+  });
+});
+
 describe("Chainlink Aggregator ABI", () => {
   it("should include latestRoundData function", () => {
     const fn = CHAINLINK_AGGREGATOR_ABI.find(

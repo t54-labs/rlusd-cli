@@ -10,6 +10,8 @@ import { registerAmmCommand } from "./commands/xrpl/amm.cmd.js";
 import { registerPathfindCommand } from "./commands/xrpl/pathfind.cmd.js";
 import { registerTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
+import { registerApproveCommand } from "./commands/eth/approve.cmd.js";
+import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -42,6 +44,10 @@ export function createProgram(): Command {
   registerDexCommand(xrplCmd, program);
   registerAmmCommand(xrplCmd, program);
   registerPathfindCommand(xrplCmd, program);
+
+  const ethCmd = program.command("eth").description("Ethereum / EVM RLUSD token and DeFi commands");
+  registerApproveCommand(ethCmd, program);
+  registerDefiCommand(ethCmd, program);
 
   return program;
 }

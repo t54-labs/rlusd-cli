@@ -1,0 +1,231 @@
+import { Command } from "commander";
+import { createWalletClient, http, parseUnits, formatUnits } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "viem/chains";
+import type { Chain } from "viem";
+import { loadConfig } from "../../config/config.js";
+import { getDefaultWallet, isXrplWallet } from "../../wallet/manager.js";
+import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
+import { getEvmPublicClient } from "../../clients/evm-client.js";
+import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
+import { logger } from "../../utils/logger.js";
+import { formatOutput } from "../../utils/format.js";
+import type { EvmChainName, NetworkEnvironment, OutputFormat, StoredEvmWallet } from "../../types/index.js";
+import { validateAddress } from "../../utils/address.js";
+
+function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
+  if (env === "mainnet") {
+    switch (chain) {
+      case "base":
+        return base;
+      case "optimism":
+        return optimism;
+      default:
+        return mainnet;
+    }
+  }
+  switch (chain) {
+    case "base":
+      return baseSepolia;
+    case "optimism":
+      return optimismSepolia;
+    default:
+      return sepolia;
+  }
+}
+
+function resolveEvmChain(opts: { chain?: string }, program: Command, defaultChain: EvmChainName): EvmChainName {
+  const raw = (opts.chain || program.opts().chain || defaultChain) as string;
+  if (raw === "xrpl") {
+    throw new Error("ERC-20 approve requires an EVM chain (ethereum, base, optimism)");
+  }
+  return raw as EvmChainName;
+}
+
+export function registerApproveCommand(parent: Command, program: Command): void {
+  parent
+    .command("approve")
+    .description("Approve RLUSD spending for a spender")
+    .requiredOption("--spender <address>", "spender contract or wallet address")
+    .requiredOption("--amount <n>", "allowance amount in RLUSD (token units)")
+    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
+    .option("--password <password>", "wallet password")
+    .action(async (opts: { spender: string; amount: string; chain?: string; password?: string }) => {
+      const config = loadConfig();
+      const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+      try {
+        const chain = resolveEvmChain(opts, program, "ethereum");
+        if (!validateAddress(opts.spender, chain)) {
+          logger.error(`Invalid spender address for ${chain}: ${opts.spender}`);
+          process.exitCode = 1;
+          return;
+        }
+        await runApprove(chain, opts.spender, opts.amount, opts.password, config, outputFormat);
+      } catch (err) {
+        logger.error(`Approve failed: ${(err as Error).message}`);
+        process.exitCode = 1;
+      }
+    });
+
+  parent
+    .command("allowance")
+    .description("Check RLUSD allowance for a spender")
+    .requiredOption("--spender <address>", "spender address")
+    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
+    .option("--password <password>", "wallet password (uses default wallet address as owner)")
+    .action(async (opts: { spender: string; chain?: string; password?: string }) => {
+      const config = loadConfig();
+      const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+      try {
+        const chain = resolveEvmChain(opts, program, "ethereum");
+        if (!validateAddress(opts.spender, chain)) {
+          logger.error(`Invalid spender address for ${chain}: ${opts.spender}`);
+          process.exitCode = 1;
+          return;
+        }
+        await runAllowance(chain, opts.spender, config, outputFormat);
+      } catch (err) {
+        logger.error(`Allowance query failed: ${(err as Error).message}`);
+        process.exitCode = 1;
+      }
+    });
+
+  parent
+    .command("revoke")
+    .description("Revoke RLUSD approval (set allowance to 0)")
+    .requiredOption("--spender <address>", "spender address to revoke")
+    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
+    .option("--password <password>", "wallet password")
+    .action(async (opts: { spender: string; chain?: string; password?: string }) => {
+      const config = loadConfig();
+      const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+      try {
+        const chain = resolveEvmChain(opts, program, "ethereum");
+        if (!validateAddress(opts.spender, chain)) {
+          logger.error(`Invalid spender address for ${chain}: ${opts.spender}`);
+          process.exitCode = 1;
+          return;
+        }
+        await runApprove(chain, opts.spender, "0", opts.password, config, outputFormat);
+      } catch (err) {
+        logger.error(`Revoke failed: ${(err as Error).message}`);
+        process.exitCode = 1;
+      }
+    });
+}
+
+async function runApprove(
+  chain: EvmChainName,
+  spender: string,
+  amountStr: string,
+  password: string | undefined,
+  config: ReturnType<typeof loadConfig>,
+  outputFormat: OutputFormat,
+): Promise<void> {
+  const walletData = getDefaultWallet(chain);
+  if (!walletData || isXrplWallet(walletData)) {
+    logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const pwd = password ?? "default-dev-password";
+  const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
+
+  const rpcUrl = config.chains[chain]?.rpc;
+  if (!rpcUrl) {
+    logger.error(`RPC not configured for ${chain}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const viemChain = getViemChain(chain, config.environment);
+  const account = privateKeyToAccount(privateKey as `0x${string}`);
+  const walletClient = createWalletClient({
+    account,
+    chain: viemChain,
+    transport: http(rpcUrl),
+  });
+
+  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const spenderAddr = spender as `0x${string}`;
+  const decimals = config.rlusd.eth_decimals;
+  const value = parseUnits(amountStr, decimals);
+
+  const hash = await walletClient.writeContract({
+    address: contractAddress,
+    abi: RLUSD_ERC20_ABI,
+    functionName: "approve",
+    args: [spenderAddr, value],
+  });
+
+  const publicClient = getEvmPublicClient(chain);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+  const data = {
+    status: receipt.status === "success" ? "success" : "failed",
+    chain,
+    hash,
+    owner: account.address,
+    spender,
+    amount: amountStr === "0" ? "0" : amountStr,
+    action: amountStr === "0" ? "revoke" : "approve",
+    gas_used: receipt.gasUsed.toString(),
+  };
+
+  if (outputFormat === "json" || outputFormat === "json-compact") {
+    logger.raw(formatOutput(data, outputFormat));
+  } else {
+    if (receipt.status === "success") {
+      logger.success(amountStr === "0" ? "Allowance revoked" : "Approval submitted");
+    } else {
+      logger.error(`Transaction reverted on ${chain}`);
+    }
+    logger.label("Tx Hash", hash);
+  }
+}
+
+async function runAllowance(
+  chain: EvmChainName,
+  spender: string,
+  config: ReturnType<typeof loadConfig>,
+  outputFormat: OutputFormat,
+): Promise<void> {
+  const walletData = getDefaultWallet(chain);
+  if (!walletData || isXrplWallet(walletData)) {
+    logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const owner = walletData.address as `0x${string}`;
+
+  const publicClient = getEvmPublicClient(chain);
+  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const spenderAddr = spender as `0x${string}`;
+
+  const raw = await publicClient.readContract({
+    address: contractAddress,
+    abi: RLUSD_ERC20_ABI,
+    functionName: "allowance",
+    args: [owner, spenderAddr],
+  });
+
+  const human = formatUnits(raw, config.rlusd.eth_decimals);
+  const data = {
+    chain,
+    owner,
+    spender,
+    allowance_raw: raw.toString(),
+    allowance: human,
+  };
+
+  if (outputFormat === "json" || outputFormat === "json-compact") {
+    logger.raw(formatOutput(data, outputFormat));
+  } else {
+    logger.label("Chain", chain);
+    logger.label("Owner", owner);
+    logger.label("Spender", spender);
+    logger.label("Allowance (RLUSD)", human);
+  }
+}
