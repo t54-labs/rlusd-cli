@@ -1,0 +1,63 @@
+{
+  "name": "@rlusd/cli",
+  "version": "0.1.0",
+  "description": "Multi-chain CLI for Ripple USD (RLUSD) stablecoin operations across XRPL, Ethereum, and L2 networks",
+  "type": "module",
+  "bin": {
+    "rlusd": "./dist/bin/rlusd.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/bin/rlusd.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist coverage"
+  },
+  "keywords": [
+    "rlusd",
+    "xrpl",
+    "ripple",
+    "stablecoin",
+    "ethereum",
+    "cli",
+    "defi",
+    "cross-chain"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "inquirer": "^13.3.2",
+    "ora": "^9.3.0",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^10.1.0",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^2.1.8"
+  }
+}
