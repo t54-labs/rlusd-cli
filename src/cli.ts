@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { registerConfigCommand } from "./commands/config.cmd.js";
 import { registerWalletCommand } from "./commands/wallet.cmd.js";
+import { registerBalanceCommand } from "./commands/balance.cmd.js";
 
 const VERSION = "0.1.0";
 
@@ -22,6 +23,7 @@ export function createProgram(): Command {
 
   registerConfigCommand(program);
   registerWalletCommand(program);
+  registerBalanceCommand(program);
 
   return program;
 }
