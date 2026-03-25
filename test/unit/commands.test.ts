@@ -231,6 +231,14 @@ describe("Prepared plan infrastructure", () => {
       chain: "ethereum-mainnet",
       action: "evm.transfer",
       requires_confirmation: true,
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm" as const,
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
       params: {
         from: "ops",
         to: "0x0000000000000000000000000000000000000001",
@@ -255,6 +263,14 @@ describe("Prepared plan infrastructure", () => {
       action: "evm.transfer",
       requires_confirmation: true,
       human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
       params: {
         from: "ops",
         to: "0x0000000000000000000000000000000000000001",
@@ -282,6 +298,14 @@ describe("Prepared plan infrastructure", () => {
       action: "xrpl.payment",
       requires_confirmation: true,
       human_summary: "Send RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "xrpl",
+        family: "xrpl",
+        issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        currency: "524C555344000000000000000000000000000000",
+      },
       params: {
         from: "ops",
         destination: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",

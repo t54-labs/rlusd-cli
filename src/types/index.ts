@@ -98,6 +98,21 @@ export interface PreparePolicy {
   warnings: string[];
 }
 
+export type ChainFamily = "evm" | "xrpl";
+
+export interface ResolvedAsset {
+  symbol: string;
+  name: string;
+  chain: string;
+  family: ChainFamily;
+  address?: string;
+  address_type?: string;
+  implementation_address?: string;
+  decimals?: number;
+  issuer?: string;
+  currency?: string;
+}
+
 export interface PreparedPlanIntent {
   [key: string]: unknown;
 }
@@ -111,6 +126,7 @@ export interface PreparedPlanData<
   action: PrepareAction;
   requires_confirmation: boolean;
   human_summary: string;
+  asset: ResolvedAsset;
   params: TParams;
   intent: TIntent;
 }

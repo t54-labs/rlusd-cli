@@ -9,6 +9,7 @@ import type {
   PreparedPlanData,
   PreparedPlanIntent,
   PrepareAction,
+  ResolvedAsset,
 } from "../types/index.js";
 
 type CreatePreparedPlanInput<
@@ -21,6 +22,7 @@ type CreatePreparedPlanInput<
   action: PrepareAction;
   requires_confirmation: boolean;
   human_summary: string;
+  asset: ResolvedAsset;
   params: TParams;
   intent: TIntent;
   warnings: string[];
@@ -56,6 +58,24 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 function isIntentRecord(value: unknown): value is PreparedPlanIntent {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+const VALID_CHAIN_FAMILIES = new Set(["evm", "xrpl"]);
+
+function isResolvedAsset(value: unknown): value is ResolvedAsset {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.symbol === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.chain === "string" &&
+    typeof candidate.family === "string" &&
+    VALID_CHAIN_FAMILIES.has(candidate.family)
+  );
 }
 
 function parseLoadedPreparedPlan(value: unknown): LoadedPreparedPlan {
@@ -98,6 +118,7 @@ function parseLoadedPreparedPlan(value: unknown): LoadedPreparedPlan {
     typeof planData.action !== "string" ||
     typeof planData.requires_confirmation !== "boolean" ||
     typeof planData.human_summary !== "string" ||
+    !isResolvedAsset(planData.asset) ||
     !isStringRecord(planData.params) ||
     !isIntentRecord(planData.intent)
   ) {
@@ -115,6 +136,7 @@ function parseLoadedPreparedPlan(value: unknown): LoadedPreparedPlan {
       action: planData.action as PrepareAction,
       requires_confirmation: planData.requires_confirmation,
       human_summary: planData.human_summary,
+      asset: planData.asset,
       params: planData.params,
       intent: planData.intent,
     },
@@ -137,6 +159,7 @@ export async function createPreparedPlan<
     chain: input.chain,
     action: input.action,
     requires_confirmation: input.requires_confirmation,
+    asset: input.asset,
     params: input.params,
     intent: input.intent,
     warnings: input.warnings,
@@ -151,6 +174,7 @@ export async function createPreparedPlan<
     action: input.action,
     requires_confirmation: input.requires_confirmation,
     human_summary: input.human_summary,
+    asset: input.asset,
     params: input.params,
     intent: input.intent,
   };
@@ -179,6 +203,7 @@ export async function loadPreparedPlan(planPath: string): Promise<LoadedPrepared
     chain: parsedPlan.chain,
     action: parsedPlan.data.action,
     requires_confirmation: parsedPlan.data.requires_confirmation,
+    asset: parsedPlan.data.asset,
     params: parsedPlan.data.params,
     intent: parsedPlan.data.intent,
     warnings: parsedPlan.warnings,
