@@ -83,9 +83,7 @@ export function createProgram(): Command {
     }
 
     if (opts.network && !["mainnet", "testnet", "devnet"].includes(opts.network)) {
-      logger.error(`Invalid --network value: ${opts.network}. Use mainnet, testnet, or devnet.`);
-      process.exitCode = 1;
-      return;
+      throw new Error(`Invalid --network value: ${opts.network}. Use mainnet, testnet, or devnet.`);
     }
 
     process.env.RLUSD_RUNTIME_NETWORK = opts.network || "";

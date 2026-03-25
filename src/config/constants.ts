@@ -1,3 +1,5 @@
+import type { PriceApiConfig } from "../types/index.js";
+
 export const RLUSD_XRPL_ISSUER = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
 export const RLUSD_XRPL_CURRENCY = "RLUSD";
 export const RLUSD_XRPL_CURRENCY_HEX = "524C555344000000000000000000000000000000";
@@ -20,7 +22,7 @@ export const XRPL_DEVNET_FAUCET = "https://faucet.devnet.rippletest.net/accounts
 export const UNISWAP_V3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
 export const UNISWAP_V3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 
-export const DEFAULT_PRICE_API: { provider: string; base_url: string; api_key?: string } = {
+export const DEFAULT_PRICE_API: PriceApiConfig = {
   provider: "coingecko",
   base_url: "https://api.coingecko.com/api/v3",
 };

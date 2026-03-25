@@ -56,6 +56,16 @@ export function registerConfigCommand(program: Command): void {
           }
         }
       }
+
+      if (config.faucet) {
+        logger.raw("");
+        if (config.faucet.xrpl_testnet) {
+          logger.label("Faucet (testnet)", config.faucet.xrpl_testnet);
+        }
+        if (config.faucet.xrpl_devnet) {
+          logger.label("Faucet (devnet)", config.faucet.xrpl_devnet);
+        }
+      }
     });
 
   configCmd
