@@ -4,7 +4,6 @@ const ALGORITHM = "aes-256-gcm";
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
-const TAG_LENGTH = 16;
 const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_DIGEST = "sha512";
 

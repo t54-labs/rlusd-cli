@@ -140,7 +140,7 @@ async function queryAllChains(outputFormat: OutputFormat, addressOverride?: stri
         native_symbol: "XRP",
       });
       totalRlusd += parseFloat(rlusd) || 0;
-    } catch (err) {
+    } catch {
       results.push({
         chain: "xrpl",
         address: xrplAddress,

@@ -27,13 +27,9 @@ export function importEvmWalletFromPrivateKey(privateKey: string): EvmWalletResu
 }
 
 export function importEvmWalletFromMnemonic(mnemonic: string, index = 0): EvmWalletResult {
-  const account = mnemonicToAccount(mnemonic, { addressIndex: index });
-  // viem's mnemonicToAccount doesn't expose the private key directly;
-  // we derive it via the HD path
   const hdAccount = mnemonicToAccount(mnemonic, { addressIndex: index });
   return {
     address: hdAccount.address,
-    // Store the mnemonic as the "private key" since viem doesn't expose the derived key
     privateKey: mnemonic,
   };
 }

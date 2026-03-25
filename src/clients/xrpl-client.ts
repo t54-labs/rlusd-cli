@@ -38,7 +38,7 @@ export async function getXrplBalance(address: string): Promise<{ xrp: string; rl
   const client = await getXrplClient();
   const config = loadConfig();
 
-  let xrpBalance = "0";
+  let xrpBalance: string;
   let rlusdBalance = "0";
 
   try {
