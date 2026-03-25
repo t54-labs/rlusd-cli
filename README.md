@@ -70,16 +70,22 @@ rlusd wallet generate --chain ethereum --name my-eth
 # 3. Fund your XRPL wallet from the testnet faucet
 rlusd faucet fund --chain xrpl
 
-# 4. Set up RLUSD trust line on XRPL (required before receiving RLUSD)
+# 4. (Optional for local testing) bootstrap a mock RLUSD issuer on XRPL testnet
+rlusd xrpl mock bootstrap --issuer-wallet mock-rlusd-issuer --currency RLUSD
+
+# 5. Set up RLUSD trust line on XRPL (required before receiving RLUSD)
 rlusd xrpl trustline setup
 
-# 5. Check balances across all chains
+# 6. Request mock RLUSD from a configured faucet
+rlusd faucet rlusd --amount 100
+
+# 7. Check balances across all chains
 rlusd balance --all
 
-# 6. Send RLUSD to someone
+# 8. Send RLUSD to someone
 rlusd send --to rDestination... --amount 100
 
-# 7. Check RLUSD price
+# 9. Check RLUSD price
 rlusd price
 ```
 
@@ -377,6 +383,73 @@ Remove the trust line (only works if RLUSD balance is zero).
 
 ```bash
 rlusd xrpl trustline remove --password s3cret
+```
+
+---
+
+### `rlusd xrpl mock` — XRPL Testnet / Devnet Mock RLUSD
+
+Create and operate a **test-only RLUSD-like asset** on XRPL without touching the official mainnet RLUSD issuer.
+
+This is useful when:
+- XRPL testnet does not provide an official RLUSD faucet
+- you want to test trust lines, payments, DEX trades, AMM, and path finding safely
+- you want to run your own faucet for external developers
+
+#### `rlusd xrpl mock bootstrap`
+
+Create a fresh XRPL issuer wallet, fund it with test XRP, enable `DefaultRipple`, and switch the local CLI config to use this mock issuer as the active XRPL RLUSD asset.
+
+```bash
+export RLUSD_WALLET_PASSWORD=your-test-password
+rlusd xrpl mock bootstrap --issuer-wallet mock-rlusd-issuer --currency RLUSD
+```
+
+This command stores:
+- an encrypted issuer wallet in `~/.config/rlusd-cli/wallets/`
+- a local-only record file in `.local/mock-rlusd-testnet.json`
+
+#### `rlusd xrpl mock mint`
+
+Mint mock RLUSD directly from the issuer to a destination XRPL account.
+
+```bash
+rlusd xrpl mock mint --to rDestination... --amount 1000 --issuer-wallet mock-rlusd-issuer
+```
+
+Requirements:
+- the destination account must already exist
+- the destination account must already have an RLUSD trust line for the configured mock issuer
+
+#### `rlusd xrpl mock faucet-serve`
+
+Run a small HTTP faucet that mints mock RLUSD on demand.
+
+```bash
+rlusd xrpl mock faucet-serve \
+  --issuer-wallet mock-rlusd-issuer \
+  --host 0.0.0.0 \
+  --port 8787 \
+  --default-amount 100
+```
+
+Endpoints:
+- `GET /health`
+- `GET /info`
+- `POST /fund`
+
+Example request:
+
+```bash
+curl -X POST http://127.0.0.1:8787/fund \
+  -H 'Content-Type: application/json' \
+  -d '{ "address": "rDestination...", "amount": "250" }'
+```
+
+To wire the CLI to this faucet:
+
+```bash
+rlusd config set --mock-rlusd-faucet-url http://127.0.0.1:8787/fund
 ```
 
 ---
@@ -744,12 +817,29 @@ rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
 Request test tokens (testnet and devnet only).
 
 ```bash
-# Get test XRP on XRPL testnet
+# Smart XRPL funding:
+# - if the account is not activated (or has no XRP), it requests test XRP
+# - if the account already has XRP and a trust line, it requests mock RLUSD
+# - if the account already has XRP but no trust line, it tells you to create one
 rlusd faucet fund --chain xrpl
 
 # Displays faucet URLs for Ethereum Sepolia
 rlusd faucet fund --chain ethereum
 ```
+
+#### `rlusd faucet rlusd`
+
+Request mock RLUSD from a configured XRPL mock faucet endpoint.
+
+```bash
+rlusd faucet rlusd --amount 100
+rlusd faucet rlusd --address rDestination... --amount 250
+```
+
+Requirements:
+- `rlusd config set --mock-rlusd-faucet-url <url>`
+- destination account must exist on XRPL testnet/devnet
+- destination account must already have a trust line to the configured mock issuer
 
 ---
 
