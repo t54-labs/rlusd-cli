@@ -13,11 +13,11 @@ export function registerFaucetCommand(program: Command): void {
     .description("Request test funds from network faucets")
     .command("fund")
     .description("Request test tokens from the faucet")
-    .option("-c, --chain <chain>", "chain to fund: xrpl | ethereum", "xrpl")
+    .option("-c, --chain <chain>", "chain to fund: xrpl | ethereum")
     .option("--address <address>", "address to fund (defaults to current wallet)")
     .action(async (opts) => {
       const config = loadConfig();
-      const chain = (opts.chain || program.opts().chain || "xrpl") as ChainName;
+      const chain = (opts.chain || program.opts().chain || config.default_chain || "xrpl") as ChainName;
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
 
       if (config.environment === "mainnet") {
@@ -50,7 +50,7 @@ async function fundXrpl(
     ? (config.faucet?.xrpl_devnet || XRPL_DEVNET_FAUCET)
     : (config.faucet?.xrpl_testnet || XRPL_TESTNET_FAUCET);
 
-  logger.info(`Requesting test XRP from ${env} faucet...`);
+  logger.info(`Requesting test XRP from XRPL ${env} faucet...`);
 
   const body: Record<string, string> = {};
   if (address) {
@@ -93,7 +93,8 @@ async function fundXrpl(
     logger.raw(formatOutput(result, outputFormat));
   } else {
     logger.success(`Funded ${fundedAddress} with ${amount} XRP`);
-    logger.dim("Note: You may still need to set up a RLUSD trust line with 'rlusd xrpl trustline setup'");
+    logger.dim("Note: This faucet provides XRP only, not RLUSD.");
+    logger.dim("To receive RLUSD, first set up a trust line: rlusd xrpl trustline setup");
   }
 }
 
@@ -106,6 +107,7 @@ function fundEvm(chain: ChainName, addressOverride: string | undefined): void {
     return;
   }
 
+  logger.info(`EVM testnet faucets provide native gas tokens (ETH), not RLUSD.`);
   logger.info(`To fund your ${chain} wallet with test ETH, visit one of these faucets:`);
   logger.raw("");
   logger.label("Your Address", address);
@@ -116,4 +118,5 @@ function fundEvm(chain: ChainName, addressOverride: string | undefined): void {
   logger.raw("    https://www.alchemy.com/faucets/ethereum-sepolia");
   logger.raw("");
   logger.dim("Copy your address and paste it into one of the faucet websites above.");
+  logger.dim("Note: RLUSD testnet tokens on Sepolia are not available via public faucets.");
 }

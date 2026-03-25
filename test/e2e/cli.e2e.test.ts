@@ -287,6 +287,22 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(consoleOutput.join("\n").toLowerCase()).toContain("xrpl");
   });
 
+  it("should stop execution on invalid runtime network override", async () => {
+    const program = createProgram();
+    program.exitOverride();
+    try {
+      await program.parseAsync(
+        ["--network", "bogus", "config", "get"],
+        { from: "user" },
+      );
+    } catch {
+      // expected
+    }
+    const output = consoleOutput.join("\n");
+    expect(output).toContain("Invalid --network value");
+    expect(output).not.toContain("Environment:");
+  });
+
   it("should switch network and verify config persisted", () => {
     const p1 = createProgram();
     p1.exitOverride();

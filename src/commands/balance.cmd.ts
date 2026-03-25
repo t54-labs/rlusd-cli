@@ -173,8 +173,8 @@ async function queryAllChains(outputFormat: OutputFormat, addressOverride?: stri
         results.push({
           chain: evmChain,
           address: evmAddress,
-          rlusd_balance: "error",
-          native_balance: "error",
+          rlusd_balance: "n/a",
+          native_balance: "n/a",
           native_symbol: "ETH",
         });
       }

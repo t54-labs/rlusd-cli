@@ -75,7 +75,12 @@ export function createProgram(): Command {
     const machineJson = Boolean(opts.json);
 
     if (globalNetwork && !["mainnet", "testnet", "devnet"].includes(globalNetwork)) {
-      throw new Error(`Invalid --network value: ${globalNetwork}. Use mainnet, testnet, or devnet.`);
+      logger.error(
+        `Invalid --network value: ${globalNetwork}. Use mainnet, testnet, or devnet.`,
+      );
+      throw new Error(
+        `Invalid --network value: ${globalNetwork}. Use mainnet, testnet, or devnet.`,
+      );
     }
 
     const config = loadConfig();

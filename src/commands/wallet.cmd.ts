@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { generateXrplWallet, importXrplWalletFromSecret, serializeXrplWallet } from "../wallet/xrpl-wallet.js";
 import { generateEvmWallet, importEvmWalletFromPrivateKey, importEvmWalletFromMnemonic, serializeEvmWallet } from "../wallet/evm-wallet.js";
 import { saveWallet, listWallets, getDefaultWallet, setDefaultWallet } from "../wallet/manager.js";
-import { loadConfig } from "../config/config.js";
+import { loadConfig, getWalletsDir } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../utils/secrets.js";
@@ -48,6 +48,7 @@ export function registerWalletCommand(program: Command): void {
           logger.label("Name", name);
           logger.label("Address", wallet.address);
           logger.label("Algorithm", algo);
+          logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
           logger.warn("Secret is encrypted and stored locally. Keep your password safe!");
         }
       } else {
@@ -64,6 +65,7 @@ export function registerWalletCommand(program: Command): void {
           logger.label("Name", name);
           logger.label("Address", wallet.address);
           logger.label("Chain", chain);
+          logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
           logger.warn("Private key is encrypted and stored locally. Keep your password safe!");
         }
       }
@@ -106,6 +108,7 @@ export function registerWalletCommand(program: Command): void {
           setDefaultWallet("xrpl", name);
           logger.success(`XRPL wallet imported: ${wallet.address}`);
           logger.label("Name", name);
+          logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
         } catch (err) {
           logger.error(`Failed to import XRPL wallet: ${(err as Error).message}`);
           process.exitCode = 1;
@@ -120,6 +123,7 @@ export function registerWalletCommand(program: Command): void {
             setDefaultWallet(chain, name);
             logger.success(`EVM wallet imported from mnemonic: ${wallet.address}`);
             logger.label("Name", name);
+            logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
           } catch (err) {
             logger.error(`Failed to import from mnemonic: ${(err as Error).message}`);
             process.exitCode = 1;
@@ -133,6 +137,7 @@ export function registerWalletCommand(program: Command): void {
             setDefaultWallet(chain, name);
             logger.success(`EVM wallet imported: ${wallet.address}`);
             logger.label("Name", name);
+            logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
           } catch (err) {
             logger.error(`Failed to import EVM wallet: ${(err as Error).message}`);
             process.exitCode = 1;
