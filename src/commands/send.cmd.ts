@@ -114,7 +114,18 @@ export function registerSendCommand(program: Command): void {
           await sendEvm(chain as EvmChainName, opts, config, outputFormat);
         }
       } catch (err) {
-        logger.error(`Send failed: ${(err as Error).message}`);
+        if (outputFormat === "json" || outputFormat === "json-compact") {
+          emitEnvelope(
+            createErrorEnvelope({
+              command: "send",
+              timestamp: new Date().toISOString(),
+              code: "COMMAND_ERROR",
+              message: `Send failed: ${(err as Error).message}`,
+            }),
+          );
+        } else {
+          logger.error(`Send failed: ${(err as Error).message}`);
+        }
         process.exitCode = 1;
       } finally {
         await disconnectXrplClient().catch(() => {});

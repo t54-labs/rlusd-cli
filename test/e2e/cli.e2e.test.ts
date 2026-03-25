@@ -180,6 +180,79 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(stored).toEqual(output);
   });
 
+  it("should print defi venues as JSON", async () => {
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      ["--json", "defi", "venues", "--chain", "ethereum-mainnet", "--capability", "swap,lend,lp"],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.command).toBe("defi.venues");
+    expect(output.data.capability_filter).toEqual(["swap", "lend", "lp"]);
+    expect(Array.isArray(output.data.venues)).toBe(true);
+    expect(output.data.venues.length).toBeGreaterThan(0);
+  });
+
+  it("should print defi supply preview as JSON", async () => {
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      ["--json", "defi", "supply", "preview", "--chain", "ethereum-mainnet", "--venue", "aave", "--amount", "5000"],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.command).toBe("defi.supply.preview");
+    expect(output.data.venue).toBe("aave");
+    expect(output.warnings).toContain("preview_only");
+  });
+
+  it("should create and store a defi supply plan with --json", async () => {
+    const gen = createProgram();
+    gen.exitOverride();
+    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "defi-plan", "--password", "p"], {
+      from: "user",
+    });
+
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "defi",
+        "supply",
+        "prepare",
+        "--chain",
+        "ethereum-mainnet",
+        "--venue",
+        "aave",
+        "--from-wallet",
+        "defi-plan",
+        "--amount",
+        "5000",
+      ],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.command).toBe("defi.supply.prepare");
+    expect(output.data.plan_id).toMatch(/^plan_[0-9a-f]{12}$/);
+    expect(output.data.action).toBe("defi.supply");
+    expect(output.data.plan_path).toBeTruthy();
+    expect(existsSync(output.data.plan_path)).toBe(true);
+
+    const stored = JSON.parse(readFileSync(output.data.plan_path, "utf-8"));
+    expect(stored).toEqual(output);
+  });
+
   it("should output bash completion script", () => {
     const program = createProgram();
     program.exitOverride();

@@ -13,7 +13,7 @@ import { registerPathfindCommand } from "./commands/xrpl/pathfind.cmd.js";
 import { registerEvmTxCommand, registerTxCommand, registerXrplTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
 import { registerApproveCommand, registerEvmApproveCommand } from "./commands/eth/approve.cmd.js";
-import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
+import { registerDefiCommand, registerTopLevelDefiCommand } from "./commands/eth/defi.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
 import { beginAgentCapture, endAgentCapture, isAgentCaptureActive } from "./agent/envelope.js";
@@ -118,6 +118,7 @@ export function createProgram(): Command {
   registerTxCommand(program);
   registerPriceCommand(program);
   registerBridgeCommand(program);
+  registerTopLevelDefiCommand(program);
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);

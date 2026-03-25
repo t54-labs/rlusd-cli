@@ -24,11 +24,11 @@ import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 const DEFAULT_FEE_TIER = 3000; // 0.3% Uniswap pool fee
 
-function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0x${string}` {
+export function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0x${string}` {
   return (config.contracts?.[chain]?.uniswap_router || UNISWAP_V3_SWAP_ROUTER) as `0x${string}`;
 }
 
-function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
+export function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
   return (config.contracts?.[chain]?.uniswap_quoter || UNISWAP_V3_QUOTER_V2) as `0x${string}`;
 }
 
@@ -51,7 +51,7 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
   }
 }
 
-function resolveTokenAddress(symbol: string): { address: string; decimals: number } | null {
+export function resolveTokenAddress(symbol: string): { address: string; decimals: number } | null {
   const upper = symbol.toUpperCase();
   const token = WELL_KNOWN_TOKENS[upper];
   if (token) return { address: token.address, decimals: token.decimals };
@@ -215,7 +215,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyWalletClient = any;
 
-function parseFeeTier(feeTier: string | undefined): number {
+export function parseFeeTier(feeTier: string | undefined): number {
   const fee = Number.parseInt(feeTier || String(DEFAULT_FEE_TIER), 10);
   if (![100, 500, 3000, 10000].includes(fee)) {
     throw new Error("Invalid --fee-tier. Supported values: 100, 500, 3000, 10000.");

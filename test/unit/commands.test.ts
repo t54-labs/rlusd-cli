@@ -743,6 +743,110 @@ describe("XRPL Command Registration", () => {
   });
 });
 
+describe("DeFi Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register top-level defi command with venues, quote, and supply subcommands", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    expect(defiCmd).toBeDefined();
+
+    const subcommands = defiCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("venues");
+    expect(subcommands).toContain("quote");
+    expect(subcommands).toContain("supply");
+  });
+
+  it("should register defi quote swap command", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    const quoteCmd = defiCmd!.commands.find((c) => c.name() === "quote");
+    expect(quoteCmd).toBeDefined();
+
+    const swapCmd = quoteCmd!.commands.find((c) => c.name() === "swap");
+    expect(swapCmd).toBeDefined();
+  });
+
+  it("should register defi supply preview prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    const supplyCmd = defiCmd!.commands.find((c) => c.name() === "supply");
+    expect(supplyCmd).toBeDefined();
+
+    const subcommands = supplyCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("preview");
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should require explicit confirmation for defi supply execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: true,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        venue: "aave",
+        from: "eth-ops",
+        amount: "5000",
+      },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+          { step: "supply", to: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2", data: "0x617ba037", value: "0" },
+        ],
+      },
+      warnings: ["mainnet", "real_funds", "token_allowance", "preview_only"],
+    });
+
+    let stdout: string[] = [];
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
+});
+
 describe("Ethereum Swap Command Registration", () => {
   beforeEach(() => {
     mkdirSync(TEST_HOME, { recursive: true });
