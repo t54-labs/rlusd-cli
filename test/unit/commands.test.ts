@@ -528,6 +528,109 @@ describe("Ethereum Command Registration", () => {
     expect(subcommands).toContain("repay");
     expect(subcommands).toContain("status");
   });
+
+  it("should register evm command with transfer, approve, and tx subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    expect(evmCmd).toBeDefined();
+
+    const subcommands = evmCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("transfer");
+    expect(subcommands).toContain("approve");
+    expect(subcommands).toContain("tx");
+  });
+
+  it("should register evm transfer prepare and execute subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const transferCmd = evmCmd!.commands.find((c) => c.name() === "transfer");
+    expect(transferCmd).toBeDefined();
+
+    const subcommands = transferCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register evm approve prepare and execute subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const approveCmd = evmCmd!.commands.find((c) => c.name() === "approve");
+    expect(approveCmd).toBeDefined();
+
+    const subcommands = approveCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register evm tx wait and receipt subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const txCmd = evmCmd!.commands.find((c) => c.name() === "tx");
+    expect(txCmd).toBeDefined();
+
+    const subcommands = txCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("wait");
+    expect(subcommands).toContain("receipt");
+  });
+
+  it("should require explicit confirmation for evm transfer execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "evm.transfer.prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        from: "eth-ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        value: "0",
+        function_name: "transfer",
+        data: "0xa9059cbb0000000000000000000000000000000000000000000000000000000000000001",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    let stdout: string[] = [];
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "evm", "transfer", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
 });
 
 describe("Ethereum Swap Command Registration", () => {

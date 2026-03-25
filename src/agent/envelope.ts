@@ -33,6 +33,19 @@ function tryParseJson(raw: string): unknown {
   }
 }
 
+function isEnvelopeLike(value: unknown): value is AgentSuccessEnvelope | AgentErrorEnvelope {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.ok === "boolean" &&
+    typeof candidate.command === "string" &&
+    typeof candidate.timestamp === "string"
+  );
+}
+
 function normalizeNextSteps(next: Array<{ command: string }>): AgentNextStep[] {
   return next.map((step) => ({ command: step.command }));
 }
@@ -120,9 +133,20 @@ export function endAgentCapture(): void {
   console.table = state.originalTable;
 
   const timestamp = new Date().toISOString();
+  const rawOutput = state.stdout.join("\n").trim();
+  const parsedStdout = rawOutput ? tryParseJson(rawOutput) : null;
 
   if (state.stderr.length > 0 || process.exitCode) {
     const message = state.stderr.join("\n").trim() || "Command failed";
+    const parsed = tryParseJson(message);
+    if (isEnvelopeLike(parsed)) {
+      state.originalError(stringifyEnvelope(parsed));
+      return;
+    }
+    if (isEnvelopeLike(parsedStdout) && parsedStdout.ok === false) {
+      state.originalError(stringifyEnvelope(parsedStdout));
+      return;
+    }
     const envelope = createErrorEnvelope({
       command: state.command,
       chain: state.chain,
@@ -135,12 +159,15 @@ export function endAgentCapture(): void {
     return;
   }
 
-  const rawOutput = state.stdout.join("\n").trim();
+  if (isEnvelopeLike(parsedStdout)) {
+    state.originalLog(stringifyEnvelope(parsedStdout));
+    return;
+  }
   const envelope = createSuccessEnvelope({
     command: state.command,
     chain: state.chain,
     timestamp,
-    data: rawOutput ? tryParseJson(rawOutput) : null,
+    data: parsedStdout,
   });
 
   state.originalLog(stringifyEnvelope(envelope));

@@ -7,8 +7,23 @@ import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm
 
 const clientCache = new Map<string, PublicClient>();
 
-function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
-  if (env === "mainnet") {
+export interface ResolvedEvmChainRef {
+  chain: EvmChainName;
+  network: NetworkEnvironment;
+  label: string;
+  displayName: string;
+}
+
+const EVM_DISPLAY_NAMES: Record<EvmChainName, string> = {
+  ethereum: "Ethereum",
+  base: "Base",
+  optimism: "Optimism",
+  ink: "Ink",
+  unichain: "Unichain",
+};
+
+export function getViemChain(chain: EvmChainName, network: NetworkEnvironment): Chain {
+  if (network === "mainnet") {
     switch (chain) {
       case "ethereum": return mainnet;
       case "base": return base;
@@ -26,7 +41,50 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
   }
 }
 
-export function getEvmPublicClient(chain: EvmChainName): PublicClient {
+export function resolveEvmChainRef(
+  input: string,
+  defaultNetwork: NetworkEnvironment,
+): ResolvedEvmChainRef {
+  const normalized = input.toLowerCase();
+
+  if (normalized.endsWith("-mainnet")) {
+    const chain = normalized.slice(0, -"-mainnet".length) as EvmChainName;
+    assertActiveRlusdEvmChain(chain);
+    return {
+      chain,
+      network: "mainnet",
+      label: `${chain}-mainnet`,
+      displayName: `${EVM_DISPLAY_NAMES[chain]} Mainnet`,
+    };
+  }
+
+  if (normalized.endsWith("-sepolia")) {
+    const chain = normalized.slice(0, -"-sepolia".length) as EvmChainName;
+    assertActiveRlusdEvmChain(chain);
+    return {
+      chain,
+      network: "testnet",
+      label: `${chain}-sepolia`,
+      displayName: `${EVM_DISPLAY_NAMES[chain]} Sepolia`,
+    };
+  }
+
+  const chain = normalized as EvmChainName;
+  assertActiveRlusdEvmChain(chain);
+  const network = defaultNetwork === "mainnet" ? "mainnet" : "testnet";
+  const suffix = network === "mainnet" ? "mainnet" : "sepolia";
+  return {
+    chain,
+    network,
+    label: `${chain}-${suffix}`,
+    displayName: `${EVM_DISPLAY_NAMES[chain]} ${suffix === "mainnet" ? "Mainnet" : "Sepolia"}`,
+  };
+}
+
+export function getEvmPublicClient(
+  chain: EvmChainName,
+  network?: NetworkEnvironment,
+): PublicClient {
   const config = loadConfig();
   const rpcUrl = config.chains[chain]?.rpc;
 
@@ -34,12 +92,13 @@ export function getEvmPublicClient(chain: EvmChainName): PublicClient {
     throw new Error(`RPC URL not configured for ${chain}. Run: rlusd config set --chain ${chain} --rpc <url>`);
   }
 
-  const cacheKey = `${chain}:${rpcUrl}`;
+  const resolvedNetwork = network ?? config.environment;
+  const cacheKey = `${chain}:${resolvedNetwork}:${rpcUrl}`;
   if (clientCache.has(cacheKey)) {
     return clientCache.get(cacheKey)!;
   }
 
-  const viemChain = getViemChain(chain, config.environment);
+  const viemChain = getViemChain(chain, resolvedNetwork);
   const client = createPublicClient({
     chain: viemChain,
     transport: http(rpcUrl, {

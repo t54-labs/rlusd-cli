@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -106,6 +106,46 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     program.exitOverride();
     program.parse(["wallet", "use", "w1", "--chain", "xrpl"], { from: "user" });
     expect(consoleOutput.join("\n")).toContain("w1");
+  });
+
+  it("should create and store an evm transfer plan with --json", async () => {
+    const gen = createProgram();
+    gen.exitOverride();
+    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "evm-plan", "--password", "p"], {
+      from: "user",
+    });
+
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "evm",
+        "transfer",
+        "prepare",
+        "--chain",
+        "ethereum-mainnet",
+        "--from-wallet",
+        "evm-plan",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "25.5",
+      ],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.command).toBe("evm.transfer.prepare");
+    expect(output.data.plan_id).toMatch(/^plan_[0-9a-f]{12}$/);
+    expect(output.data.action).toBe("evm.transfer");
+    expect(output.data.plan_path).toBeTruthy();
+    expect(existsSync(output.data.plan_path)).toBe(true);
+
+    const stored = JSON.parse(readFileSync(output.data.plan_path, "utf-8"));
+    expect(stored).toEqual(output);
   });
 
   it("should output bash completion script", () => {

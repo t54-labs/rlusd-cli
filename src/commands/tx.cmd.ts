@@ -1,8 +1,9 @@
 import { Command } from "commander";
+import { createErrorEnvelope, createSuccessEnvelope } from "../agent/envelope.js";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
 import { getXrplClient, disconnectXrplClient } from "../clients/xrpl-client.js";
-import { getEvmPublicClient } from "../clients/evm-client.js";
+import { getEvmPublicClient, resolveEvmChainRef } from "../clients/evm-client.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
@@ -13,6 +14,14 @@ import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm
 const DEFAULT_HISTORY_LIMIT = 20;
 const EVM_LOG_LOOKBACK_BLOCKS = 100_000n;
 const EVM_LOG_BATCH_SIZE = 20_000n;
+
+function emitEnvelope(value: unknown): void {
+  if (value && typeof value === "object" && !Array.isArray(value) && (value as { ok?: boolean }).ok === false) {
+    console.error(JSON.stringify(value, null, 2));
+    return;
+  }
+  logger.raw(JSON.stringify(value, null, 2));
+}
 
 export function registerTxCommand(program: Command): void {
   const txCmd = program.command("tx").description("Query RLUSD-related transactions");
@@ -63,6 +72,101 @@ export function registerTxCommand(program: Command): void {
         process.exitCode = 1;
       } finally {
         await disconnectXrplClient().catch(() => {});
+      }
+    });
+}
+
+export function registerEvmTxCommand(parent: Command): void {
+  const txCmd = parent.command("tx").description("EVM transaction monitoring commands");
+
+  txCmd
+    .command("wait")
+    .description("Wait for an EVM transaction receipt")
+    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--hash <hash>", "transaction hash")
+    .action(async (opts: { chain: string; hash: string }) => {
+      const config = loadConfig();
+
+      try {
+        const chainInput = opts.chain || (parent.opts().chain as string | undefined);
+        if (!chainInput) {
+          throw new Error("The --chain option is required.");
+        }
+        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash: opts.hash as `0x${string}`,
+        });
+
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "evm.tx.wait",
+            chain: resolved.label,
+            timestamp: new Date().toISOString(),
+            data: {
+              transaction_hash: receipt.transactionHash,
+              status: receipt.status,
+              block_number: Number(receipt.blockNumber),
+              confirmations: 1,
+            },
+          }),
+        );
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "evm.tx.wait",
+            timestamp: new Date().toISOString(),
+            code: "TX_WAIT_FAILED",
+            message:
+              error instanceof Error ? error.message : "Unable to wait for EVM transaction.",
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  txCmd
+    .command("receipt")
+    .description("Read an EVM transaction receipt")
+    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--hash <hash>", "transaction hash")
+    .action(async (opts: { chain: string; hash: string }) => {
+      const config = loadConfig();
+
+      try {
+        const chainInput = opts.chain || (parent.opts().chain as string | undefined);
+        if (!chainInput) {
+          throw new Error("The --chain option is required.");
+        }
+        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
+        const receipt = await publicClient.getTransactionReceipt({
+          hash: opts.hash as `0x${string}`,
+        });
+
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "evm.tx.receipt",
+            chain: resolved.label,
+            timestamp: new Date().toISOString(),
+            data: {
+              transaction_hash: receipt.transactionHash,
+              status: receipt.status,
+              block_number: Number(receipt.blockNumber),
+            },
+          }),
+        );
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "evm.tx.receipt",
+            timestamp: new Date().toISOString(),
+            code: "TX_RECEIPT_FAILED",
+            message:
+              error instanceof Error ? error.message : "Unable to read EVM transaction receipt.",
+          }),
+        );
+        process.exitCode = 1;
       }
     });
 }
