@@ -24,10 +24,12 @@ const {
   getConfigDir,
   getConfigPath,
   getWalletsDir,
+  getPlansDir,
   ensureConfigDir,
 } = await import("../../src/config/config.js");
 
 const { getNetworkPreset, isValidNetwork } = await import("../../src/config/networks.js");
+const { getPreparePolicy } = await import("../../src/policy/index.js");
 
 const {
   RLUSD_XRPL_ISSUER,
@@ -51,14 +53,16 @@ describe("Config System", () => {
       expect(getConfigDir()).toBe(join(TEST_HOME, ".config/rlusd-cli"));
       expect(getConfigPath()).toBe(join(TEST_HOME, ".config/rlusd-cli/config.yml"));
       expect(getWalletsDir()).toBe(join(TEST_HOME, ".config/rlusd-cli/wallets"));
+      expect(getPlansDir()).toBe(join(TEST_HOME, ".config/rlusd-cli/plans"));
     });
   });
 
   describe("ensureConfigDir", () => {
-    it("should create config and wallets directories", () => {
+    it("should create config, wallets, and plans directories", () => {
       ensureConfigDir();
       expect(existsSync(getConfigDir())).toBe(true);
       expect(existsSync(getWalletsDir())).toBe(true);
+      expect(existsSync(getPlansDir())).toBe(true);
     });
 
     it("should be idempotent", () => {
@@ -232,6 +236,20 @@ describe("Config System", () => {
       loadConfig();
       const config = setOutputFormat("json-compact");
       expect(config.output_format).toBe("json-compact");
+    });
+  });
+
+  describe("prepare policy", () => {
+    it("should require confirmation metadata for mainnet actions", () => {
+      const transferPolicy = getPreparePolicy("xrpl-mainnet", "xrpl.payment");
+      expect(transferPolicy.requires_confirmation).toBe(true);
+      expect(transferPolicy.warnings).toContain("mainnet");
+    });
+
+    it("should not require confirmation metadata for non-mainnet actions", () => {
+      const transferPolicy = getPreparePolicy("ethereum-sepolia", "evm.transfer");
+      expect(transferPolicy.requires_confirmation).toBe(false);
+      expect(transferPolicy.warnings).toEqual([]);
     });
   });
 });

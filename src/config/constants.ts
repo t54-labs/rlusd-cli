@@ -12,6 +12,7 @@ export const AAVE_V3_POOL_ETHEREUM = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2
 export const CONFIG_DIR = ".config/rlusd-cli";
 export const CONFIG_FILE = "config.yml";
 export const WALLETS_DIR = "wallets";
+export const PLANS_DIR = "plans";
 
 export const XRPL_TESTNET_FAUCET = "https://faucet.altnet.rippletest.net/accounts";
 export const XRPL_DEVNET_FAUCET = "https://faucet.devnet.rippletest.net/accounts";

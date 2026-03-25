@@ -11,6 +11,7 @@ import {
   CHAINLINK_RLUSD_USD_ORACLE,
   CONFIG_DIR,
   CONFIG_FILE,
+  PLANS_DIR,
   WALLETS_DIR,
   DEFAULT_PRICE_API,
   DEFAULT_CONTRACTS,
@@ -32,6 +33,10 @@ export function getConfigPath(): string {
 
 export function getWalletsDir(): string {
   return join(getConfigDir(), WALLETS_DIR);
+}
+
+export function getPlansDir(): string {
+  return join(getConfigDir(), PLANS_DIR);
 }
 
 function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
@@ -62,6 +67,10 @@ export function ensureConfigDir(): void {
   const walletsDir = getWalletsDir();
   if (!existsSync(walletsDir)) {
     mkdirSync(walletsDir, { recursive: true, mode: 0o700 });
+  }
+  const plansDir = getPlansDir();
+  if (!existsSync(plansDir)) {
+    mkdirSync(plansDir, { recursive: true, mode: 0o700 });
   }
 }
 

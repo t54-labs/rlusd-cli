@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -11,7 +11,8 @@ vi.mock("node:os", async () => {
 });
 
 const { createProgram } = await import("../../src/cli.js");
-const { ensureConfigDir } = await import("../../src/config/config.js");
+const { ensureConfigDir, getPlansDir } = await import("../../src/config/config.js");
+const { createPlanId, createPreparedPlan, loadPreparedPlan } = await import("../../src/plans/index.js");
 
 describe("Command Registration", () => {
   beforeEach(() => {
@@ -211,6 +212,95 @@ describe("Transaction Command Registration", () => {
 
     const optionNames = historyCmd!.options.map((o) => o.long);
     expect(optionNames).toContain("--limit");
+  });
+});
+
+describe("Prepared plan infrastructure", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should create deterministic plan ids for identical inputs", () => {
+    const input = {
+      command: "rlusd evm transfer prepare",
+      chain: "ethereum-mainnet",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      params: {
+        from: "ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x0000000000000000000000000000000000000002",
+        data: "0xabc123",
+      },
+      warnings: ["mainnet", "real_funds"],
+    };
+
+    expect(createPlanId(input)).toBe(createPlanId(input));
+    expect(createPlanId(input)).toMatch(/^plan_[0-9a-f]{12}$/);
+  });
+
+  it("should write prepared plan files to the stable local plan directory", async () => {
+    const envelope = await createPreparedPlan({
+      command: "rlusd evm transfer prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      human_summary: "Transfer RLUSD",
+      params: {
+        from: "ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x0000000000000000000000000000000000000002",
+        data: "0xabc123",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    expect(envelope.data.plan_path).toContain(getPlansDir());
+
+    const storedEnvelope = JSON.parse(readFileSync(envelope.data.plan_path, "utf-8"));
+    expect(storedEnvelope.data.plan_id).toBe(envelope.data.plan_id);
+    expect(storedEnvelope.data.plan_path).toBe(envelope.data.plan_path);
+  });
+
+  it("should reject tampered prepared plan files", async () => {
+    const envelope = await createPreparedPlan({
+      command: "rlusd xrpl payment prepare",
+      chain: "xrpl-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "xrpl.payment",
+      requires_confirmation: true,
+      human_summary: "Send RLUSD",
+      params: {
+        from: "ops",
+        destination: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        amount: "10",
+      },
+      intent: {
+        transaction_type: "Payment",
+        amount: "10",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    const tampered = JSON.parse(readFileSync(envelope.data.plan_path, "utf-8"));
+    tampered.data.params.amount = "999";
+    writeFileSync(envelope.data.plan_path, JSON.stringify(tampered, null, 2));
+
+    await expect(loadPreparedPlan(envelope.data.plan_path)).rejects.toThrow(
+      "Prepared plan contents do not match the stored deterministic plan id.",
+    );
   });
 });
 
