@@ -61,14 +61,14 @@ export function registerSendCommand(program: Command): void {
         if (detected === "xrpl") {
           chain = "xrpl";
         } else if (detected === "ethereum") {
-          if (config.default_chain !== "ethereum") {
+          if (config.default_chain === "xrpl") {
             logger.error(
-              "EVM recipient detected. Please specify --chain ethereum explicitly.",
+              "EVM recipient detected but default chain is xrpl. Please specify --chain explicitly (e.g. --chain ethereum).",
             );
             process.exitCode = 1;
             return;
           }
-          chain = "ethereum";
+          chain = config.default_chain;
         } else {
           chain = config.default_chain;
         }

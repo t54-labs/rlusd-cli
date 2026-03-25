@@ -133,9 +133,13 @@ export function loadConfig(): AppConfig {
     environment,
     chains: { ...defaultConfig.chains, ...parsed.chains },
     rlusd: { ...defaultConfig.rlusd, ...parsed.rlusd },
-    price_api: { ...defaultConfig.price_api, ...parsed.price_api },
+    price_api: defaultConfig.price_api
+      ? { ...defaultConfig.price_api, ...(parsed.price_api ?? {}) }
+      : parsed.price_api,
     contracts: mergedContracts,
-    faucet: { ...defaultConfig.faucet, ...parsed.faucet },
+    faucet: defaultConfig.faucet
+      ? { ...defaultConfig.faucet, ...(parsed.faucet ?? {}) }
+      : parsed.faucet,
   });
 }
 

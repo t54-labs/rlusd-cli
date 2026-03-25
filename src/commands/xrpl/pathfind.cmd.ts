@@ -1,12 +1,10 @@
 import { Command } from "commander";
 import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
-import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
 import { loadConfig } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
-import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
+import type { OutputFormat } from "../../types/index.js";
 
 function getOutputFormat(program: Command, configOutput: OutputFormat): OutputFormat {
   return (program.opts().output as OutputFormat) || configOutput;
@@ -15,27 +13,21 @@ function getOutputFormat(program: Command, configOutput: OutputFormat): OutputFo
 export function registerPathfindCommand(parent: Command, program: Command): void {
   parent
     .command("pathfind")
-    .description("Find payment paths to deliver RLUSD to a destination")
+    .description("Find payment paths to deliver RLUSD to a destination (read-only, no signing required)")
     .requiredOption("--to <address>", "Destination XRPL classic address")
     .requiredOption("--amount <n>", "RLUSD value to deliver")
-    .option(
-      "--password <password>",
-      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
-    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
         const outputFormat = getOutputFormat(program, config.output_format);
 
-        const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
+        const walletData = getDefaultWallet("xrpl");
         if (!walletData) {
-          logger.error("No XRPL wallet configured.");
+          logger.error("No XRPL wallet configured. Needed for source_account address.");
           process.exitCode = 1;
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
-        const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
         const destinationAmount = {
@@ -46,7 +38,7 @@ export function registerPathfindCommand(parent: Command, program: Command): void
 
         const res = await client.request({
           command: "ripple_path_find",
-          source_account: wallet.address,
+          source_account: walletData.address,
           destination_account: opts.to,
           destination_amount: destinationAmount,
         });
@@ -75,7 +67,7 @@ export function registerPathfindCommand(parent: Command, program: Command): void
         } else {
           if (alternatives.length === 0) {
             logger.warn("No paths found for this payment");
-            logger.label("From", wallet.address);
+            logger.label("From", walletData.address);
             logger.label("To", opts.to);
             return;
           }

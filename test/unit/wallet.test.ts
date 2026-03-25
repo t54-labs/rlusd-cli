@@ -129,12 +129,15 @@ describe("EVM Wallet", () => {
     expect(decrypted).toBe(wallet.privateKey);
   });
 
-  it("should import wallet from mnemonic as a real private key", () => {
+  it("should import wallet from mnemonic and derive correct address", () => {
     const mnemonic =
       "test test test test test test test test test test test junk";
     const imported = importEvmWalletFromMnemonic(mnemonic);
     expect(imported.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(imported.privateKey).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(imported.address.toLowerCase()).toBe(
+      "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".toLowerCase(),
+    );
   });
 
   it("should reject invalid mnemonic", () => {
@@ -223,6 +226,16 @@ describe("Wallet Manager", () => {
   });
 
   it("should reject setting a missing wallet as default", () => {
-    expect(() => setDefaultWallet("xrpl", "missing-wallet")).toThrow();
+    expect(() => setDefaultWallet("xrpl", "missing-wallet")).toThrow("does not exist");
+  });
+
+  it("should reject setting an XRPL wallet as default for an EVM chain", () => {
+    saveWallet(serializeXrplWallet("xrpl-only", generateXrplWallet(), "p"));
+    expect(() => setDefaultWallet("ethereum", "xrpl-only")).toThrow("cannot be used");
+  });
+
+  it("should reject setting an EVM wallet as default for XRPL", () => {
+    saveWallet(serializeEvmWallet("evm-only", generateEvmWallet(), "p"));
+    expect(() => setDefaultWallet("xrpl", "evm-only")).toThrow("cannot be used");
   });
 });

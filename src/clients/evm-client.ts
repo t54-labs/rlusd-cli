@@ -75,7 +75,7 @@ export async function getEvmRlusdBalance(
 
   const rlusd = formatUnits(rlusdRaw, config.rlusd.eth_decimals);
   const native = formatUnits(nativeRaw, 18);
-  const nativeSymbol = chain === "ethereum" ? "ETH" : "ETH";
+  const nativeSymbol = "ETH";
 
   return { rlusd, native, nativeSymbol };
 }

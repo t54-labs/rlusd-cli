@@ -67,8 +67,16 @@ export function getDefaultWallet(chain: ChainName): StoredWallet | null {
 }
 
 export function setDefaultWallet(chain: ChainName, walletName: string): void {
-  if (!loadWallet(walletName)) {
+  const wallet = loadWallet(walletName);
+  if (!wallet) {
     throw new Error(`Wallet '${walletName}' does not exist.`);
+  }
+  const walletIsXrpl = wallet.chain === "xrpl";
+  const targetIsXrpl = chain === "xrpl";
+  if (walletIsXrpl !== targetIsXrpl) {
+    throw new Error(
+      `Wallet '${walletName}' is a ${wallet.chain} wallet and cannot be used as default for ${chain}.`,
+    );
   }
   const config = loadConfig();
   if (!config.chains[chain]) {

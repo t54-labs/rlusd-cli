@@ -138,6 +138,41 @@ rlusd config set --default-chain ethereum
 rlusd config set --format json
 ```
 
+#### `rlusd config set` — Price API
+
+Configure the price feed provider. The default is the free CoinGecko API; paid users can point to CoinGecko Pro or a custom endpoint.
+
+```bash
+# Use CoinGecko Pro (paid)
+rlusd config set --price-url https://pro-api.coingecko.com/api/v3 --price-api-key YOUR_KEY
+
+# Reset to free CoinGecko
+rlusd config set --price-url https://api.coingecko.com/api/v3
+```
+
+#### `rlusd config set` — DeFi Contract Addresses
+
+Override Uniswap V3 and Aave V3 contract addresses per chain. Useful for L2 deployments or custom routers.
+
+```bash
+# Uniswap V3 SwapRouter (requires --chain)
+rlusd config set --chain base --uniswap-router 0x2626664c2603336E57B271c5C0b26F421741e481
+
+# Uniswap V3 QuoterV2 (requires --chain)
+rlusd config set --chain base --uniswap-quoter 0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+
+# Aave V3 Pool (requires --chain)
+rlusd config set --chain ethereum --aave-pool 0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2
+```
+
+#### `rlusd config set` — Faucet URL
+
+Point to a custom XRPL faucet (e.g. a self-hosted one for private testnets).
+
+```bash
+rlusd config set --network testnet --faucet-url https://my-faucet.example.com/accounts
+```
+
 ---
 
 ### `rlusd wallet` — Wallet Management
@@ -555,23 +590,25 @@ rlusd eth defi aave status --output json
 
 ### `rlusd price` — RLUSD Price Oracle
 
-Query RLUSD price from multiple sources.
+Query RLUSD price from multiple sources. The `--source` is **auto-detected** from your default chain: XRPL defaults to `dex`, EVM chains default to `chainlink`. You can override with `--source`.
 
 ```bash
-# Default: Chainlink oracle on Ethereum
+# Auto-detect: uses DEX when default chain is xrpl, Chainlink when ethereum
 rlusd price
 
-# Chainlink oracle explicitly
+# Chainlink oracle on Ethereum (RLUSD/USD)
 rlusd price --source chainlink
 
-# XRPL DEX order book price
+# XRPL DEX order book (shows XRP/RLUSD + estimated RLUSD/USD via CoinGecko)
 rlusd price --source dex
 
 # JSON output
 rlusd price --output json
 ```
 
-`price --source chainlink` currently reads the RLUSD/USD oracle on **Ethereum** only.
+- `--source chainlink` reads the Chainlink RLUSD/USD oracle on Ethereum. A stale-data warning is shown if the feed hasn't updated in over 1 hour; queries are rejected after 24 hours.
+- `--source dex` reads the XRPL order book and fetches XRP/USD from CoinGecko (configurable via `config set --price-url`) to estimate a USD price.
+- The price API provider can be customized — see [`rlusd config set` — Price API](#rlusd-config-set--price-api).
 
 ---
 

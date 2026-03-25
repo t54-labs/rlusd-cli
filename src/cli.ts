@@ -40,6 +40,11 @@ export function createProgram(): Command {
 
   program.hook("preAction", (thisCommand) => {
     const opts = thisCommand.optsWithGlobals();
+    if (opts.network && !["mainnet", "testnet", "devnet"].includes(opts.network)) {
+      logger.error(`Invalid --network value: ${opts.network}. Use mainnet, testnet, or devnet.`);
+      process.exitCode = 1;
+      return;
+    }
     process.env.RLUSD_RUNTIME_NETWORK = opts.network || "";
     process.env.RLUSD_RUNTIME_OUTPUT = opts.output || "";
     process.env.RLUSD_RUNTIME_CHAIN = opts.chain || "";
