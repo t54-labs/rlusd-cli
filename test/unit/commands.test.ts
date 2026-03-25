@@ -38,6 +38,8 @@ describe("Command Registration", () => {
     expect(commandNames).toContain("send");
     expect(commandNames).toContain("faucet");
     expect(commandNames).toContain("xrpl");
+    expect(commandNames).toContain("resolve");
+    expect(commandNames).toContain("fiat");
   });
 
   it("should register xrpl trustline subcommands", () => {
@@ -271,6 +273,60 @@ describe("Agent JSON Contract", () => {
     const envelope = JSON.parse(stderr.join("\n"));
     expect(envelope.ok).toBe(false);
     expect(envelope.error.message).toContain("Wallet password is required");
+  });
+
+  it("should return structured asset resolution data with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "resolve", "asset", "--chain", "ethereum-mainnet", "--symbol", "RLUSD"], {
+      from: "user",
+    });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("resolve asset");
+    expect(envelope.data.symbol).toBe("RLUSD");
+    expect(envelope.data.chain).toBe("ethereum-mainnet");
+  });
+
+  it("should return fiat onboarding checklist guidance with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "onboarding", "checklist"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat onboarding checklist");
+    expect(Array.isArray(envelope.data.steps)).toBe(true);
+    expect(envelope.data.steps.length).toBeGreaterThan(0);
+  });
+
+  it("should return fiat buy instructions with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "buy", "instructions"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat buy instructions");
+    expect(Array.isArray(envelope.data.providers)).toBe(true);
+    expect(envelope.data.providers.length).toBeGreaterThan(0);
+  });
+
+  it("should return fiat redeem instructions with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "redeem", "instructions"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat redeem instructions");
+    expect(Array.isArray(envelope.data.providers)).toBe(true);
+    expect(envelope.data.providers.length).toBeGreaterThan(0);
   });
 });
 
@@ -645,8 +701,8 @@ describe("Ethereum Command Registration", () => {
       warnings: ["mainnet", "real_funds"],
     });
 
-    let stdout: string[] = [];
-    let stderr: string[] = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = (...args: unknown[]) => {
@@ -721,8 +777,8 @@ describe("XRPL Command Registration", () => {
       warnings: ["mainnet", "trustline_change"],
     });
 
-    let stdout: string[] = [];
-    let stderr: string[] = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = (...args: unknown[]) => {
@@ -825,8 +881,8 @@ describe("DeFi Command Registration", () => {
       warnings: ["mainnet", "real_funds", "token_allowance", "preview_only"],
     });
 
-    let stdout: string[] = [];
-    let stderr: string[] = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = (...args: unknown[]) => {
@@ -875,7 +931,7 @@ describe("DeFi Command Registration", () => {
       warnings: [],
     });
 
-    let stderr: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = () => {};
@@ -924,7 +980,7 @@ describe("DeFi Command Registration", () => {
       warnings: [],
     });
 
-    let stderr: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = () => {};
@@ -973,7 +1029,7 @@ describe("DeFi Command Registration", () => {
       warnings: [],
     });
 
-    let stderr: string[] = [];
+    const stderr: string[] = [];
     const originalLog = console.log;
     const originalError = console.error;
     console.log = () => {};

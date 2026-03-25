@@ -46,7 +46,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     } catch {
       // Commander throws on --version with exitOverride
     }
-    expect(consoleOutput.join("\n")).toContain("0.1.0");
+    expect(consoleOutput.join("\n")).toContain("0.2.0");
   });
 
   it("should generate and list XRPL wallet", () => {

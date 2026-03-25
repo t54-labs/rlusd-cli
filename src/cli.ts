@@ -2,6 +2,8 @@ import { Command } from "commander";
 import { registerConfigCommand } from "./commands/config.cmd.js";
 import { registerWalletCommand } from "./commands/wallet.cmd.js";
 import { registerBalanceCommand } from "./commands/balance.cmd.js";
+import { registerResolveCommand } from "./commands/resolve.cmd.js";
+import { registerFiatCommand } from "./commands/fiat.cmd.js";
 import { registerEvmTransferCommand, registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
@@ -67,6 +69,7 @@ export function createProgram(): Command {
     .allowUnknownOption(false);
 
   program.hook("preAction", (thisCommand, actionCommand) => {
+    process.exitCode = 0;
     const opts = actionCommand.optsWithGlobals();
     const globalNetwork = thisCommand.opts().network as string | undefined;
     const machineJson = Boolean(opts.json);
@@ -113,6 +116,8 @@ export function createProgram(): Command {
   registerConfigCommand(program);
   registerWalletCommand(program);
   registerBalanceCommand(program);
+  registerResolveCommand(program);
+  registerFiatCommand(program);
   registerSendCommand(program);
   registerFaucetCommand(program);
   registerTxCommand(program);

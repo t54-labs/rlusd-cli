@@ -744,6 +744,96 @@ RLUSD supports fiat gateways through MoonPay and Transak. The CLI does not direc
 | MoonPay | Yes — credit/debit, Apple Pay, bank transfer | Yes — bank, card, PayPal | Ethereum, XRPL | $20 |
 | Transak | Yes — bank transfer, credit/debit | TBD | Ethereum, XRPL | Varies |
 
+### 3.6.1 Fiat Guidance Commands
+
+The CLI now exposes reference-only fiat guidance commands for automation and skill routing:
+
+```bash
+rlusd fiat onboarding checklist --json
+rlusd fiat buy instructions --json
+rlusd fiat redeem instructions --json
+```
+
+These commands do not initiate third-party API actions. They return stable machine-readable guidance describing recommended onboarding, buy-side, and redemption-side provider workflows.
+
+---
+
+### 3.7 Skill-Facing Contract (2026 Cutover)
+
+The cutover-ready contract for `rlusd-skills` is the explicit machine-oriented surface below.
+
+#### 3.7.1 Shared Envelope
+
+All `--json` responses use one envelope:
+
+```json
+{
+  "ok": true,
+  "command": "evm.transfer.prepare",
+  "chain": "ethereum-mainnet",
+  "timestamp": "2026-03-25T00:00:00.000Z",
+  "data": {},
+  "warnings": [],
+  "next": []
+}
+```
+
+Errors use the same top-level shape with:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "CONFIRMATION_REQUIRED",
+    "message": "Execution requires an explicit confirmation matching the prepared plan id.",
+    "retryable": false
+  }
+}
+```
+
+#### 3.7.2 Stable Command Families
+
+```bash
+# Metadata
+rlusd resolve asset --chain ethereum-mainnet --symbol RLUSD --json
+
+# Fiat guidance
+rlusd fiat onboarding checklist --json
+rlusd fiat buy instructions --json
+rlusd fiat redeem instructions --json
+
+# EVM prepared flows
+rlusd evm transfer prepare ...
+rlusd evm transfer execute ...
+rlusd evm approve prepare ...
+rlusd evm approve execute ...
+rlusd evm tx wait ...
+rlusd evm tx receipt ...
+
+# XRPL prepared flows
+rlusd xrpl trustline prepare ...
+rlusd xrpl trustline execute ...
+rlusd xrpl account info ...
+rlusd xrpl payment prepare ...
+rlusd xrpl payment execute ...
+rlusd xrpl tx wait ...
+rlusd xrpl payment receipt ...
+
+# DeFi discovery and planned execution
+rlusd defi venues ...
+rlusd defi quote swap ...
+rlusd defi supply preview ...
+rlusd defi supply prepare ...
+rlusd defi supply execute ...
+```
+
+#### 3.7.3 Write-Path Rules
+
+- Write commands prefer explicit wallet flags: `--from-wallet`, `--owner-wallet`, and `--wallet`.
+- Prepared plans are stored under `~/.config/rlusd-cli/plans/`.
+- Mainnet-gated plans require `--confirm-plan-id` that matches the stored `plan_id`.
+- `defi quote swap` is live quote data and returns freshness metadata: `quoted_at`, `ttl_seconds`, and `expires_at`.
+
 ---
 
 ## 4. Project Architecture

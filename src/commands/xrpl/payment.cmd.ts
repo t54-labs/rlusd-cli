@@ -15,7 +15,7 @@ import type { ResolvedAsset, StoredXrplWallet } from "../../types/index.js";
 import { validateAddress } from "../../utils/address.js";
 import { logger } from "../../utils/logger.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
-import { getDefaultWallet, resolveWalletForChain } from "../../wallet/manager.js";
+import { resolveWalletForChain } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
 
 const XRPL_AMOUNT_PATTERN = /^(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
