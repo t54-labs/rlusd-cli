@@ -1,5 +1,12 @@
 # RLUSD CLI
 
+[![CI](https://github.com/t54-labs/rlusd-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/t54-labs/rlusd-cli/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/@rlusd/cli.svg)](https://www.npmjs.com/package/@rlusd/cli)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](docs/CONTRIBUTING.md)
+
 A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin operations across **XRP Ledger**, **Ethereum**, and **Ethereum L2 networks**.
 
 ## Features
