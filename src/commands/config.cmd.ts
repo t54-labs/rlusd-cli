@@ -1,5 +1,16 @@
 import { Command } from "commander";
-import { loadConfig, setNetwork, setChainRpc, setDefaultChain, setOutputFormat, setPriceApi, setContract, setFaucetUrl } from "../config/config.js";
+import {
+  loadConfig,
+  setNetwork,
+  setChainRpc,
+  setDefaultChain,
+  setOutputFormat,
+  setPriceApi,
+  setContract,
+  setFaucetUrl,
+  setMockRlusdFaucetUrl,
+  setRlusdXrplAsset,
+} from "../config/config.js";
 import { isValidNetwork } from "../config/networks.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
@@ -87,6 +98,9 @@ export function registerConfigCommand(program: Command): void {
     .option("--uniswap-quoter <address>", "Uniswap V3 QuoterV2 address (requires --chain)")
     .option("--aave-pool <address>", "Aave V3 Pool address (requires --chain)")
     .option("--faucet-url <url>", "XRPL faucet URL (requires --network testnet|devnet)")
+    .option("--mock-rlusd-faucet-url <url>", "mock RLUSD faucet URL for testnet/devnet")
+    .option("--xrpl-issuer <address>", "override the XRPL RLUSD issuer address")
+    .option("--xrpl-currency <currency>", "override the XRPL RLUSD currency code (hex or string)")
     .action((opts) => {
       let changed = false;
 
@@ -192,6 +206,21 @@ export function registerConfigCommand(program: Command): void {
         }
         setFaucetUrl(net, opts.faucetUrl);
         logger.success(`XRPL ${net} faucet URL set to ${opts.faucetUrl}`);
+        changed = true;
+      }
+
+      if (opts.mockRlusdFaucetUrl) {
+        setMockRlusdFaucetUrl(opts.mockRlusdFaucetUrl);
+        logger.success(`Mock RLUSD faucet URL set to ${opts.mockRlusdFaucetUrl}`);
+        changed = true;
+      }
+
+      if (opts.xrplIssuer || opts.xrplCurrency) {
+        setRlusdXrplAsset({
+          issuer: opts.xrplIssuer,
+          currency: opts.xrplCurrency,
+        });
+        logger.success("XRPL RLUSD asset settings updated");
         changed = true;
       }
 

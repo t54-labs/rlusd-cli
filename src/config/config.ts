@@ -216,6 +216,20 @@ export function setPriceApi(updates: { provider?: string; base_url?: string; api
   return config;
 }
 
+export function setRlusdXrplAsset(updates: {
+  issuer?: string;
+  currency?: string;
+}): AppConfig {
+  const config = loadConfig();
+  config.rlusd = {
+    ...config.rlusd,
+    ...(updates.issuer ? { xrpl_issuer: updates.issuer } : {}),
+    ...(updates.currency ? { xrpl_currency: updates.currency } : {}),
+  };
+  saveConfig(config);
+  return config;
+}
+
 const VALID_CONTRACT_FIELDS: ReadonlySet<keyof ChainContracts> = new Set([
   "uniswap_router",
   "uniswap_quoter",
@@ -236,9 +250,22 @@ export function setContract(chain: ChainName, field: keyof ChainContracts, addre
 
 export function setFaucetUrl(env: "testnet" | "devnet", url: string): AppConfig {
   const config = loadConfig();
-  if (!config.faucet) config.faucet = { xrpl_testnet: "", xrpl_devnet: "" };
+  if (!config.faucet) {
+    config.faucet = { xrpl_testnet: "", xrpl_devnet: "", rlusd_mock_url: "" };
+  }
   if (env === "testnet") config.faucet.xrpl_testnet = url;
   else config.faucet.xrpl_devnet = url;
+  saveConfig(config);
+  return config;
+}
+
+export function setMockRlusdFaucetUrl(url: string): AppConfig {
+  const config = loadConfig();
+  config.faucet = {
+    xrpl_testnet: config.faucet?.xrpl_testnet || DEFAULT_FAUCET.xrpl_testnet,
+    xrpl_devnet: config.faucet?.xrpl_devnet || DEFAULT_FAUCET.xrpl_devnet,
+    rlusd_mock_url: url,
+  };
   saveConfig(config);
   return config;
 }

@@ -8,9 +8,11 @@ import type { AppConfig } from "../types/index.js";
 import type { ChainName, OutputFormat } from "../types/index.js";
 
 export function registerFaucetCommand(program: Command): void {
-  program
+  const faucetCmd = program
     .command("faucet")
-    .description("Request test funds from network faucets")
+    .description("Request test funds from network faucets");
+
+  faucetCmd
     .command("fund")
     .description("Request test tokens from the faucet")
     .option("-c, --chain <chain>", "chain to fund: xrpl | ethereum")
@@ -34,6 +36,59 @@ export function registerFaucetCommand(program: Command): void {
         }
       } catch (err) {
         logger.error(`Faucet request failed: ${(err as Error).message}`);
+        process.exitCode = 1;
+      }
+    });
+
+  faucetCmd
+    .command("rlusd")
+    .description("Request mock RLUSD from a configured XRPL mock faucet")
+    .option("--address <address>", "recipient XRPL address (defaults to current wallet)")
+    .option("--amount <amount>", "requested RLUSD amount")
+    .action(async (opts) => {
+      const config = loadConfig();
+      const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+      const address = opts.address || getDefaultWallet("xrpl")?.address;
+
+      if (!address) {
+        logger.error("No XRPL wallet configured. Use --address or configure an XRPL wallet first.");
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!config.faucet?.rlusd_mock_url) {
+        logger.error("No mock RLUSD faucet URL configured.");
+        logger.dim(
+          "Set one with: rlusd config set --mock-rlusd-faucet-url http://host:port/fund",
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      try {
+        const response = await fetch(config.faucet.rlusd_mock_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address,
+            ...(opts.amount ? { amount: opts.amount } : {}),
+          }),
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Mock RLUSD faucet returned ${response.status}: ${text}`);
+        }
+
+        const data = (await response.json()) as Record<string, unknown>;
+        if (outputFormat === "json" || outputFormat === "json-compact") {
+          logger.raw(formatOutput(data, outputFormat));
+        } else {
+          logger.success("Mock RLUSD faucet request completed");
+          logger.raw(formatOutput(data, "table"));
+        }
+      } catch (err) {
+        logger.error(`Mock RLUSD faucet request failed: ${(err as Error).message}`);
         process.exitCode = 1;
       }
     });

@@ -21,6 +21,8 @@ const {
   setChainRpc,
   setDefaultChain,
   setOutputFormat,
+  setMockRlusdFaucetUrl,
+  setRlusdXrplAsset,
   getConfigDir,
   getConfigPath,
   getWalletsDir,
@@ -262,6 +264,26 @@ describe("Config System", () => {
       const transferPolicy = getPreparePolicy("ethereum-sepolia", "evm.transfer");
       expect(transferPolicy.requires_confirmation).toBe(false);
       expect(transferPolicy.warnings).toEqual([]);
+    });
+  });
+
+  describe("setRlusdXrplAsset", () => {
+    it("should override issuer and currency", () => {
+      loadConfig();
+      const config = setRlusdXrplAsset({
+        issuer: "rTESTISSUER123456789012345678901234",
+        currency: "524C555344000000000000000000000000000000",
+      });
+      expect(config.rlusd.xrpl_issuer).toBe("rTESTISSUER123456789012345678901234");
+      expect(config.rlusd.xrpl_currency).toBe("524C555344000000000000000000000000000000");
+    });
+  });
+
+  describe("setMockRlusdFaucetUrl", () => {
+    it("should set the mock faucet URL", () => {
+      loadConfig();
+      const config = setMockRlusdFaucetUrl("http://localhost:8787/fund");
+      expect(config.faucet?.rlusd_mock_url).toBe("http://localhost:8787/fund");
     });
   });
 });

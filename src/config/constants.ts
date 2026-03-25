@@ -38,6 +38,7 @@ export const DEFAULT_CONTRACTS: Record<string, { uniswap_router?: string; uniswa
 export const DEFAULT_FAUCET = {
   xrpl_testnet: XRPL_TESTNET_FAUCET,
   xrpl_devnet: XRPL_DEVNET_FAUCET,
+  rlusd_mock_url: "",
 };
 
 export const WELL_KNOWN_TOKENS: Record<string, { address: string; decimals: number; name: string }> = {

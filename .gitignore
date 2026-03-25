@@ -23,6 +23,8 @@ Thumbs.db
 # Config (may contain secrets)
 # Note: we don't ignore the config template, only user-specific config
 *.local.yml
+.local/
+*.local.json
 
 # Test coverage
 coverage/
