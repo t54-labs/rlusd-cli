@@ -8,6 +8,12 @@ export interface XrpUsdPrice {
   source: string;
 }
 
+export interface QuoteWindow {
+  quoted_at: string;
+  ttl_seconds: number;
+  expires_at: string;
+}
+
 /**
  * Fetch XRP/USD price using the configured price API provider.
  * Falls back to null on any network or parsing error so callers can degrade gracefully.
@@ -17,6 +23,10 @@ export async function fetchXrpUsdPrice(priceApi?: PriceApiConfig): Promise<XrpUs
   const provider = cfg.provider || "coingecko";
   const baseUrl = cfg.base_url || DEFAULT_PRICE_API.base_url;
 
+  if (provider !== "coingecko") {
+    throw new Error(`Unknown price provider "${provider}". Supported: coingecko`);
+  }
+
   try {
     if (provider === "coingecko") {
       return await fetchFromCoingecko(baseUrl, cfg.api_key);
@@ -25,6 +35,16 @@ export async function fetchXrpUsdPrice(priceApi?: PriceApiConfig): Promise<XrpUs
   } catch {
     return null;
   }
+}
+
+export function createQuoteWindow(quotedAtIso: string, ttlSeconds: number): QuoteWindow {
+  const quotedAt = new Date(quotedAtIso);
+  const expiresAt = new Date(quotedAt.getTime() + ttlSeconds * 1000);
+  return {
+    quoted_at: quotedAtIso,
+    ttl_seconds: ttlSeconds,
+    expires_at: expiresAt.toISOString(),
+  };
 }
 
 async function fetchFromCoingecko(baseUrl: string, apiKey?: string): Promise<XrpUsdPrice | null> {
@@ -37,14 +57,17 @@ async function fetchFromCoingecko(baseUrl: string, apiKey?: string): Promise<Xrp
     headers["x-cg-pro-api-key"] = apiKey;
   }
 
-  const res = await fetch(url, { signal: controller.signal, headers });
-  clearTimeout(timer);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers });
 
-  if (!res.ok) return null;
+    if (!res.ok) return null;
 
-  const data = (await res.json()) as { ripple?: { usd?: number } };
-  const usd = data?.ripple?.usd;
-  if (typeof usd !== "number" || !Number.isFinite(usd)) return null;
+    const data = (await res.json()) as { ripple?: { usd?: number } };
+    const usd = data?.ripple?.usd;
+    if (typeof usd !== "number" || !Number.isFinite(usd)) return null;
 
-  return { usd, source: "coingecko" };
+    return { usd, source: "coingecko" };
+  } finally {
+    clearTimeout(timer);
+  }
 }

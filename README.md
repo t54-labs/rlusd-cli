@@ -102,6 +102,45 @@ Every command supports these flags:
 
 > **Security note**: for commands that require wallet decryption, prefer setting `RLUSD_WALLET_PASSWORD` instead of passing `--password` directly on the command line.
 
+### Skill-Facing Contract
+
+The cutover-ready surface for automation and skill execution is:
+
+```bash
+# Metadata and fiat guidance
+rlusd resolve asset --chain ethereum-mainnet --symbol RLUSD --json
+rlusd fiat onboarding checklist --json
+rlusd fiat buy instructions --json
+rlusd fiat redeem instructions --json
+
+# EVM write flow
+rlusd evm transfer prepare --chain ethereum-mainnet --from-wallet ops --to 0x... --amount 25.5 --json
+rlusd evm transfer execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd evm tx wait --chain ethereum-mainnet --hash 0x... --json
+rlusd evm tx receipt --chain ethereum-mainnet --hash 0x... --json
+
+# XRPL write flow
+rlusd xrpl trustline prepare --chain xrpl-mainnet --address r... --limit 100000 --json
+rlusd xrpl trustline execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --wallet ops --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd xrpl payment prepare --chain xrpl-mainnet --from-wallet ops --to r... --amount 250 --json
+rlusd xrpl payment execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd xrpl tx wait --chain xrpl-mainnet --hash ABC... --json
+rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
+
+# DeFi discovery and execution
+rlusd defi venues --chain ethereum-mainnet --capability swap,lend,lp --json
+rlusd defi quote swap --chain ethereum-mainnet --from RLUSD --to USDC --amount 1000 --json
+rlusd defi supply preview --chain ethereum-mainnet --venue aave --amount 5000 --json
+rlusd defi supply prepare --chain ethereum-mainnet --venue aave --from-wallet ops --amount 5000 --json
+rlusd defi supply execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+```
+
+Contract guarantees for skill consumers:
+- `--json` returns one shared envelope with `ok`, `command`, `chain`, `timestamp`, `warnings`, and `next`.
+- Write flows use `prepare -> review -> execute`; execution requires a matching `--confirm-plan-id` when the plan is confirmation-gated.
+- Explicit wallet flags are preferred over implicit defaults for write paths: `--from-wallet`, `--owner-wallet`, and `--wallet`.
+- `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`).
+
 ---
 
 ### `rlusd config` — Configuration Management
@@ -642,6 +681,60 @@ Show recent RLUSD transactions for the current wallet. For EVM chains, RLUSD his
 rlusd tx history                          # default chain, last 20
 rlusd tx history --chain ethereum --limit 50
 rlusd tx history --output json
+```
+
+---
+
+### `rlusd resolve` — Stable Metadata
+
+Resolve stable RLUSD metadata for automation and docs generation.
+
+```bash
+rlusd resolve asset --chain xrpl-mainnet --symbol RLUSD --json
+rlusd resolve asset --chain ethereum-mainnet --symbol RLUSD --json
+```
+
+---
+
+### `rlusd fiat` — Fiat Guidance
+
+Reference-only fiat onboarding and on/off-ramp guidance.
+
+```bash
+rlusd fiat onboarding checklist --json
+rlusd fiat buy instructions --json
+rlusd fiat redeem instructions --json
+```
+
+---
+
+### Prepared Write Flows
+
+For skill consumers, the stable write surface is the explicit prepare/execute workflow rather than the older one-shot commands:
+
+```bash
+rlusd evm transfer prepare --chain ethereum-mainnet --from-wallet ops --to 0x... --amount 25.5 --json
+rlusd evm approve prepare --chain ethereum-mainnet --owner-wallet ops --spender 0x... --amount 1000 --json
+rlusd xrpl trustline prepare --chain xrpl-mainnet --address r... --limit 100000 --json
+rlusd xrpl payment prepare --chain xrpl-mainnet --from-wallet ops --to r... --amount 250 --json
+rlusd defi supply prepare --chain ethereum-mainnet --venue aave --from-wallet ops --amount 5000 --json
+```
+
+Execution uses the stored plan path plus an explicit confirmation that matches the returned `plan_id`:
+
+```bash
+rlusd evm transfer execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd xrpl payment execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd defi supply execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+```
+
+Related wait/receipt commands:
+
+```bash
+rlusd evm tx wait --chain ethereum-mainnet --hash 0x... --json
+rlusd evm tx receipt --chain ethereum-mainnet --hash 0x... --json
+rlusd xrpl tx wait --chain xrpl-mainnet --hash ABC... --json
+rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
 ```
 
 ---

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -11,7 +11,11 @@ vi.mock("node:os", async () => {
 });
 
 const { createProgram } = await import("../../src/cli.js");
-const { ensureConfigDir } = await import("../../src/config/config.js");
+const { ensureConfigDir, getPlansDir } = await import("../../src/config/config.js");
+const { createPlanId, createPreparedPlan, loadPreparedPlan } = await import("../../src/plans/index.js");
+const { saveWallet } = await import("../../src/wallet/manager.js");
+const { generateXrplWallet, serializeXrplWallet } = await import("../../src/wallet/xrpl-wallet.js");
+const { generateEvmWallet, serializeEvmWallet } = await import("../../src/wallet/evm-wallet.js");
 
 describe("Command Registration", () => {
   beforeEach(() => {
@@ -34,6 +38,8 @@ describe("Command Registration", () => {
     expect(commandNames).toContain("send");
     expect(commandNames).toContain("faucet");
     expect(commandNames).toContain("xrpl");
+    expect(commandNames).toContain("resolve");
+    expect(commandNames).toContain("fiat");
   });
 
   it("should register xrpl trustline subcommands", () => {
@@ -45,9 +51,47 @@ describe("Command Registration", () => {
     expect(trustlineCmd).toBeDefined();
 
     const subcommands = trustlineCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
     expect(subcommands).toContain("setup");
     expect(subcommands).toContain("status");
     expect(subcommands).toContain("remove");
+
+    const setupCmd = trustlineCmd!.commands.find((c) => c.name() === "setup");
+    const setupOptionNames = setupCmd!.options.map((o) => o.long);
+    expect(setupOptionNames).toContain("--wallet");
+  });
+
+  it("should register xrpl account info command", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const accountCmd = xrplCmd!.commands.find((c) => c.name() === "account");
+    expect(accountCmd).toBeDefined();
+
+    const infoCmd = accountCmd!.commands.find((c) => c.name() === "info");
+    expect(infoCmd).toBeDefined();
+  });
+
+  it("should register xrpl payment prepare execute and receipt subcommands", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const paymentCmd = xrplCmd!.commands.find((c) => c.name() === "payment");
+    expect(paymentCmd).toBeDefined();
+
+    const subcommands = paymentCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+    expect(subcommands).toContain("receipt");
+  });
+
+  it("should register xrpl tx wait subcommand", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const txCmd = xrplCmd!.commands.find((c) => c.name() === "tx");
+    expect(txCmd).toBeDefined();
+
+    const subcommands = txCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("wait");
   });
 
   it("should register send command with required options", () => {
@@ -58,6 +102,7 @@ describe("Command Registration", () => {
     const optionNames = sendCmd!.options.map((o) => o.long);
     expect(optionNames).toContain("--to");
     expect(optionNames).toContain("--amount");
+    expect(optionNames).toContain("--from-wallet");
     expect(optionNames).toContain("--tag");
     expect(optionNames).toContain("--memo");
     expect(optionNames).toContain("--dry-run");
@@ -110,6 +155,181 @@ describe("Command Registration", () => {
 const { detectChainFromAddress } = await import("../../src/utils/address.js");
 const { CHAINLINK_AGGREGATOR_ABI } = await import("../../src/abi/chainlink-aggregator.js");
 
+describe("Agent JSON Contract", () => {
+  let stdout: string[];
+  let stderr: string[];
+  const originalLog = console.log;
+  const originalError = console.error;
+
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+    stdout = [];
+    stderr = [];
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+  });
+
+  afterEach(() => {
+    console.log = originalLog;
+    console.error = originalError;
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should emit a shared success envelope with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "--chain", "xrpl", "--network", "mainnet", "config", "get"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("config get");
+    expect(envelope.chain).toBe("xrpl-mainnet");
+    expect(envelope.timestamp).toEqual(expect.any(String));
+    expect(envelope.data.environment).toBe("mainnet");
+    expect(envelope.data.rlusd).toBeDefined();
+    expect(envelope.warnings).toEqual([]);
+    expect(envelope.next).toEqual([]);
+  });
+
+  it("should emit structured JSON errors to stderr with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "--chain", "xrpl", "config", "set", "-n", "invalid"], { from: "user" });
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe("config set");
+    expect(envelope.chain).toBe("xrpl-testnet");
+    expect(envelope.timestamp).toEqual(expect.any(String));
+    expect(envelope.error.code).toEqual(expect.any(String));
+    expect(envelope.error.message).toContain("Invalid network");
+    expect(envelope.error.retryable).toBe(false);
+  });
+
+  it("should reject invalid global --network before command runs", () => {
+    const program = createProgram();
+    program.exitOverride();
+    expect(() =>
+      program.parse(["--network", "garbage", "config", "get"], { from: "user" }),
+    ).toThrow("Invalid --network value: garbage");
+  });
+
+  it("should emit JSON errors for wrong-chain wallet selections", async () => {
+    saveWallet(serializeXrplWallet("xrpl-only", generateXrplWallet(), "p"));
+
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "--chain",
+        "ethereum",
+        "send",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "1",
+        "--from-wallet",
+        "xrpl-only",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain("configured for xrpl, not ethereum");
+  });
+
+  it("should emit JSON errors when wallet passwords are missing in machine mode", async () => {
+    saveWallet(serializeEvmWallet("eth-ops", generateEvmWallet(), "p", "ethereum"));
+
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "--chain",
+        "ethereum",
+        "send",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "1",
+        "--from-wallet",
+        "eth-ops",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain("Wallet password is required");
+  });
+
+  it("should return structured asset resolution data with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "resolve", "asset", "--chain", "ethereum-mainnet", "--symbol", "RLUSD"], {
+      from: "user",
+    });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("resolve asset");
+    expect(envelope.data.symbol).toBe("RLUSD");
+    expect(envelope.data.chain).toBe("ethereum-mainnet");
+  });
+
+  it("should return fiat onboarding checklist guidance with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "onboarding", "checklist"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat onboarding checklist");
+    expect(Array.isArray(envelope.data.steps)).toBe(true);
+    expect(envelope.data.steps.length).toBeGreaterThan(0);
+  });
+
+  it("should return fiat buy instructions with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "buy", "instructions"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat buy instructions");
+    expect(Array.isArray(envelope.data.providers)).toBe(true);
+    expect(envelope.data.providers.length).toBeGreaterThan(0);
+  });
+
+  it("should return fiat redeem instructions with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "fiat", "redeem", "instructions"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("fiat redeem instructions");
+    expect(Array.isArray(envelope.data.providers)).toBe(true);
+    expect(envelope.data.providers.length).toBeGreaterThan(0);
+  });
+});
+
 describe("Send Command Address Detection", () => {
   it("should detect XRPL chain from r-address", () => {
     expect(detectChainFromAddress("rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De")).toBe("xrpl");
@@ -152,6 +372,119 @@ describe("Transaction Command Registration", () => {
 
     const optionNames = historyCmd!.options.map((o) => o.long);
     expect(optionNames).toContain("--limit");
+  });
+});
+
+describe("Prepared plan infrastructure", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should create deterministic plan ids for identical inputs", () => {
+    const input = {
+      command: "rlusd evm transfer prepare",
+      chain: "ethereum-mainnet",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm" as const,
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        from: "ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x0000000000000000000000000000000000000002",
+        data: "0xabc123",
+      },
+      warnings: ["mainnet", "real_funds"],
+    };
+
+    expect(createPlanId(input)).toBe(createPlanId(input));
+    expect(createPlanId(input)).toMatch(/^plan_[0-9a-f]{12}$/);
+  });
+
+  it("should write prepared plan files to the stable local plan directory", async () => {
+    const envelope = await createPreparedPlan({
+      command: "rlusd evm transfer prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        from: "ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x0000000000000000000000000000000000000002",
+        data: "0xabc123",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    expect(envelope.data.plan_path).toContain(getPlansDir());
+
+    const storedEnvelope = JSON.parse(readFileSync(envelope.data.plan_path, "utf-8"));
+    expect(storedEnvelope.data.plan_id).toBe(envelope.data.plan_id);
+    expect(storedEnvelope.data.plan_path).toBe(envelope.data.plan_path);
+  });
+
+  it("should reject tampered prepared plan files", async () => {
+    const envelope = await createPreparedPlan({
+      command: "rlusd xrpl payment prepare",
+      chain: "xrpl-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "xrpl.payment",
+      requires_confirmation: true,
+      human_summary: "Send RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "xrpl",
+        family: "xrpl",
+        issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        currency: "524C555344000000000000000000000000000000",
+      },
+      params: {
+        from: "ops",
+        destination: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        amount: "10",
+      },
+      intent: {
+        transaction_type: "Payment",
+        amount: "10",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    const tampered = JSON.parse(readFileSync(envelope.data.plan_path, "utf-8"));
+    tampered.data.params.amount = "999";
+    writeFileSync(envelope.data.plan_path, JSON.stringify(tampered, null, 2));
+
+    await expect(loadPreparedPlan(envelope.data.plan_path)).rejects.toThrow(
+      "Prepared plan contents do not match the stored deterministic plan id.",
+    );
   });
 });
 
@@ -271,6 +604,10 @@ describe("Ethereum Command Registration", () => {
     expect(subcommands).toContain("approve");
     expect(subcommands).toContain("allowance");
     expect(subcommands).toContain("revoke");
+
+    const approveCmd = ethCmd!.commands.find((c) => c.name() === "approve");
+    const approveOptionNames = approveCmd!.options.map((o) => o.long);
+    expect(approveOptionNames).toContain("--owner-wallet");
   });
 
   it("should register eth defi aave subcommands", () => {
@@ -288,6 +625,431 @@ describe("Ethereum Command Registration", () => {
     expect(subcommands).toContain("borrow");
     expect(subcommands).toContain("repay");
     expect(subcommands).toContain("status");
+  });
+
+  it("should register evm command with transfer, approve, and tx subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    expect(evmCmd).toBeDefined();
+
+    const subcommands = evmCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("transfer");
+    expect(subcommands).toContain("approve");
+    expect(subcommands).toContain("tx");
+  });
+
+  it("should register evm transfer prepare and execute subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const transferCmd = evmCmd!.commands.find((c) => c.name() === "transfer");
+    expect(transferCmd).toBeDefined();
+
+    const subcommands = transferCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register evm approve prepare and execute subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const approveCmd = evmCmd!.commands.find((c) => c.name() === "approve");
+    expect(approveCmd).toBeDefined();
+
+    const subcommands = approveCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register evm tx wait and receipt subcommands", () => {
+    const program = createProgram();
+    const evmCmd = program.commands.find((c) => c.name() === "evm");
+    const txCmd = evmCmd!.commands.find((c) => c.name() === "tx");
+    expect(txCmd).toBeDefined();
+
+    const subcommands = txCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("wait");
+    expect(subcommands).toContain("receipt");
+  });
+
+  it("should require explicit confirmation for evm transfer execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "evm.transfer.prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: true,
+      human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        from: "eth-ops",
+        to: "0x0000000000000000000000000000000000000001",
+        amount: "25.5",
+      },
+      intent: {
+        to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        value: "0",
+        function_name: "transfer",
+        data: "0xa9059cbb0000000000000000000000000000000000000000000000000000000000000001",
+      },
+      warnings: ["mainnet", "real_funds"],
+    });
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "evm", "transfer", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
+});
+
+describe("XRPL Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should require explicit confirmation for xrpl trustline execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "xrpl.trustline.prepare",
+      chain: "xrpl-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "xrpl.trustline",
+      requires_confirmation: true,
+      human_summary: "Trustline RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "xrpl",
+        family: "xrpl",
+        issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        currency: "524C555344000000000000000000000000000000",
+      },
+      params: {
+        address: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        limit: "100000",
+      },
+      intent: {
+        account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        transaction_type: "TrustSet",
+        tx_json: {
+          TransactionType: "TrustSet",
+          Account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+          LimitAmount: {
+            currency: "524C555344000000000000000000000000000000",
+            issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+            value: "100000",
+          },
+        },
+      },
+      warnings: ["mainnet", "trustline_change"],
+    });
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "xrpl", "trustline", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
+});
+
+describe("DeFi Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register top-level defi command with venues, quote, and supply subcommands", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    expect(defiCmd).toBeDefined();
+
+    const subcommands = defiCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("venues");
+    expect(subcommands).toContain("quote");
+    expect(subcommands).toContain("supply");
+  });
+
+  it("should register defi quote swap command", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    const quoteCmd = defiCmd!.commands.find((c) => c.name() === "quote");
+    expect(quoteCmd).toBeDefined();
+
+    const swapCmd = quoteCmd!.commands.find((c) => c.name() === "swap");
+    expect(swapCmd).toBeDefined();
+  });
+
+  it("should register defi supply preview prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = program.commands.find((c) => c.name() === "defi");
+    const supplyCmd = defiCmd!.commands.find((c) => c.name() === "supply");
+    expect(supplyCmd).toBeDefined();
+
+    const subcommands = supplyCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("preview");
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should require explicit confirmation for defi supply execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: true,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: {
+        venue: "aave",
+        from: "eth-ops",
+        amount: "5000",
+      },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+          { step: "supply", to: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2", data: "0x617ba037", value: "0" },
+        ],
+      },
+      warnings: ["mainnet", "real_funds", "token_allowance", "preview_only"],
+    });
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
+
+  it("should reject execute with wrong action type", async () => {
+    const envelope = await createPreparedPlan({
+      command: "evm.transfer.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: false,
+      human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { from: "eth-ops", to: "0x0000000000000000000000000000000000000001", amount: "10" },
+      intent: { to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", value: "0", data: "0xa9059cbb" },
+      warnings: [],
+    });
+
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("cannot be executed by defi.supply.execute");
+  });
+
+  it("should reject execute when plan is missing params.from", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: false,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { venue: "aave", amount: "100" },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+        ],
+      },
+      warnings: [],
+    });
+
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("missing supply sender");
+  });
+
+  it("should reject execute when wallet does not exist", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: false,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { venue: "aave", from: "nonexistent-wallet", amount: "100" },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+        ],
+      },
+      warnings: [],
+    });
+
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.code).toBe("EXECUTION_FAILED");
   });
 });
 

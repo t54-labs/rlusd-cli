@@ -3,6 +3,8 @@ import {
   detectChainFromAddress,
   isXrplAddress,
   isEvmAddress,
+  isXrplTransactionHash,
+  normalizeXrplTransactionHash,
   validateAddress,
 } from "../../src/utils/address.js";
 
@@ -62,6 +64,29 @@ describe("Address Utilities", () => {
       expect(validateAddress("0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", "ethereum")).toBe(true);
       expect(validateAddress("0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", "base")).toBe(true);
       expect(validateAddress("rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "ethereum")).toBe(false);
+    });
+  });
+
+  describe("XRPL transaction hash helpers", () => {
+    it("should accept valid XRPL transaction hashes", () => {
+      expect(
+        isXrplTransactionHash("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+      ).toBe(true);
+      expect(
+        isXrplTransactionHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+      ).toBe(true);
+    });
+
+    it("should reject invalid XRPL transaction hashes", () => {
+      expect(isXrplTransactionHash("")).toBe(false);
+      expect(isXrplTransactionHash("0xabc")).toBe(false);
+      expect(isXrplTransactionHash("xyz")).toBe(false);
+    });
+
+    it("should normalize XRPL transaction hashes to uppercase", () => {
+      expect(
+        normalizeXrplTransactionHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+      ).toBe("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
     });
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import type { AppConfig, NetworkEnvironment, ChainName, OutputFormat } from "../types/index.js";
+import type { AppConfig, NetworkEnvironment, ChainName, OutputFormat, ChainContracts } from "../types/index.js";
 import {
   RLUSD_XRPL_ISSUER,
   RLUSD_XRPL_CURRENCY_HEX,
@@ -11,6 +11,7 @@ import {
   CHAINLINK_RLUSD_USD_ORACLE,
   CONFIG_DIR,
   CONFIG_FILE,
+  PLANS_DIR,
   WALLETS_DIR,
   DEFAULT_PRICE_API,
   DEFAULT_CONTRACTS,
@@ -32,6 +33,10 @@ export function getConfigPath(): string {
 
 export function getWalletsDir(): string {
   return join(getConfigDir(), WALLETS_DIR);
+}
+
+export function getPlansDir(): string {
+  return join(getConfigDir(), PLANS_DIR);
 }
 
 function mergeChains(
@@ -75,6 +80,10 @@ export function ensureConfigDir(): void {
   const walletsDir = getWalletsDir();
   if (!existsSync(walletsDir)) {
     mkdirSync(walletsDir, { recursive: true, mode: 0o700 });
+  }
+  const plansDir = getPlansDir();
+  if (!existsSync(plansDir)) {
+    mkdirSync(plansDir, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -207,11 +216,20 @@ export function setPriceApi(updates: { provider?: string; base_url?: string; api
   return config;
 }
 
-export function setContract(chain: ChainName, field: string, address: string): AppConfig {
+const VALID_CONTRACT_FIELDS: ReadonlySet<keyof ChainContracts> = new Set([
+  "uniswap_router",
+  "uniswap_quoter",
+  "aave_v3_pool",
+]);
+
+export function setContract(chain: ChainName, field: keyof ChainContracts, address: string): AppConfig {
+  if (!VALID_CONTRACT_FIELDS.has(field)) {
+    throw new Error(`Invalid contract field "${field}". Valid: ${[...VALID_CONTRACT_FIELDS].join(", ")}`);
+  }
   const config = loadConfig();
   if (!config.contracts) config.contracts = {};
   if (!config.contracts[chain]) config.contracts[chain] = {};
-  (config.contracts[chain] as Record<string, string>)[field] = address;
+  config.contracts[chain]![field] = address;
   saveConfig(config);
   return config;
 }

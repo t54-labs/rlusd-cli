@@ -11,6 +11,7 @@ vi.mock("node:os", async () => {
 });
 
 const { estimateXrplFee } = await import("../../src/services/gas-estimator.js");
+const { createQuoteWindow } = await import("../../src/services/price-feed.js");
 const { ensureConfigDir } = await import("../../src/config/config.js");
 const { createProgram } = await import("../../src/cli.js");
 
@@ -19,6 +20,15 @@ describe("Gas Estimator", () => {
     const fee = await estimateXrplFee();
     expect(fee).toBe("0.000012");
     expect(parseFloat(fee)).toBeGreaterThan(0);
+  });
+});
+
+describe("Quote freshness metadata", () => {
+  it("should create quote timestamps with a ttl window", () => {
+    const metadata = createQuoteWindow("2026-03-25T01:00:00.000Z", 30);
+    expect(metadata.quoted_at).toBe("2026-03-25T01:00:00.000Z");
+    expect(metadata.ttl_seconds).toBe(30);
+    expect(metadata.expires_at).toBe("2026-03-25T01:00:30.000Z");
   });
 });
 

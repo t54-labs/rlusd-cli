@@ -1,3 +1,5 @@
+import { parseUnits } from "viem";
+
 /**
  * Convert XRP to drops (1 XRP = 1,000,000 drops).
  */
@@ -18,8 +20,8 @@ export function dropsToXrp(drops: string | number): string {
  * Convert a human-readable amount to the smallest ERC-20 unit (wei-like).
  */
 export function toErc20Units(amount: string | number, decimals: number): bigint {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return BigInt(Math.round(num * 10 ** decimals));
+  const normalized = typeof amount === "string" ? amount : String(amount);
+  return parseUnits(normalized, decimals);
 }
 
 /**

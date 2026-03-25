@@ -1,7 +1,7 @@
 {
   "name": "@rlusd/cli",
-  "version": "0.1.0",
-  "description": "Multi-chain CLI for Ripple USD (RLUSD) stablecoin operations across XRPL, Ethereum, and L2 networks",
+  "version": "0.2.0",
+  "description": "Agent-safe multi-chain CLI for Ripple USD (RLUSD) operations across XRPL, Ethereum, and L2 networks",
   "type": "module",
   "bin": {
     "rlusd": "./dist/bin/rlusd.js"

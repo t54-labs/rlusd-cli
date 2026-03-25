@@ -9,7 +9,7 @@ describe("CLI Program", () => {
 
   it("should have version set", () => {
     const program = createProgram();
-    expect(program.version()).toBe("0.1.0");
+    expect(program.version()).toBe("0.2.0");
   });
 
   it("should accept --output option on a subcommand", () => {
@@ -17,6 +17,23 @@ describe("CLI Program", () => {
     program.exitOverride();
     program.parse(["--output", "json", "config", "get"], { from: "user" });
     expect(program.opts().output).toBe("json");
+  });
+
+  it("should accept --json as a machine output flag", () => {
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => undefined;
+    console.error = () => undefined;
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(["--json", "config", "get"], { from: "user" });
+      expect(program.opts().json).toBe(true);
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
   });
 
   it("should default --output to table", () => {
@@ -44,5 +61,17 @@ describe("CLI Program", () => {
     const program = createProgram();
     const configCmd = program.commands.find((c) => c.name() === "config");
     expect(configCmd).toBeDefined();
+  });
+
+  it("should have resolve subcommand registered", () => {
+    const program = createProgram();
+    const resolveCmd = program.commands.find((c) => c.name() === "resolve");
+    expect(resolveCmd).toBeDefined();
+  });
+
+  it("should have fiat subcommand registered", () => {
+    const program = createProgram();
+    const fiatCmd = program.commands.find((c) => c.name() === "fiat");
+    expect(fiatCmd).toBeDefined();
   });
 });

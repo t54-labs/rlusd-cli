@@ -85,3 +85,63 @@ export interface TransactionResult {
   timestamp?: string;
   fee?: string;
 }
+
+export type PrepareAction =
+  | "evm.transfer"
+  | "evm.approve"
+  | "defi.supply"
+  | "xrpl.trustline"
+  | "xrpl.payment";
+
+export interface PreparePolicy {
+  requires_confirmation: boolean;
+  warnings: string[];
+}
+
+export type ChainFamily = "evm" | "xrpl";
+
+export interface ResolvedAsset {
+  symbol: string;
+  name: string;
+  chain: string;
+  family: ChainFamily;
+  address?: string;
+  address_type?: string;
+  implementation_address?: string;
+  decimals?: number;
+  issuer?: string;
+  currency?: string;
+}
+
+export interface PreparedPlanIntent {
+  [key: string]: unknown;
+}
+
+export interface PreparedPlanData<
+  TParams extends Record<string, string> = Record<string, string>,
+  TIntent extends PreparedPlanIntent = PreparedPlanIntent,
+> {
+  plan_id: string;
+  plan_path: string;
+  action: PrepareAction;
+  requires_confirmation: boolean;
+  human_summary: string;
+  asset: ResolvedAsset;
+  params: TParams;
+  intent: TIntent;
+}
+
+export interface LoadedPreparedPlan<
+  TParams extends Record<string, string> = Record<string, string>,
+  TIntent extends PreparedPlanIntent = PreparedPlanIntent,
+> {
+  ok: true;
+  command: string;
+  chain: string;
+  timestamp: string;
+  data: PreparedPlanData<TParams, TIntent>;
+  warnings: string[];
+  next: Array<{ command: string }>;
+}
+
+export type WalletOptionName = "--wallet" | "--from-wallet" | "--owner-wallet";

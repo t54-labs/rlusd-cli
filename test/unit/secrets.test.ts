@@ -24,6 +24,12 @@ describe("Secret Utilities", () => {
     );
   });
 
+  it("should mention machine-readable flows when password is missing in machine mode", () => {
+    expect(() => resolveWalletPassword(undefined, { machineReadable: true })).toThrow(
+      /machine-readable/i,
+    );
+  });
+
   it("should expose the password environment variable name", () => {
     expect(getWalletPasswordEnvVarName()).toBe("RLUSD_WALLET_PASSWORD");
   });
