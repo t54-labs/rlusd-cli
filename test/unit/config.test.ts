@@ -35,6 +35,7 @@ const {
   RLUSD_XRPL_ISSUER,
   RLUSD_XRPL_ISSUER_TESTNET,
   RLUSD_ETH_CONTRACT,
+  RLUSD_ETH_CONTRACT_TESTNET,
 } = await import("../../src/config/constants.js");
 
 describe("Config System", () => {
@@ -80,7 +81,7 @@ describe("Config System", () => {
       expect(config.default_chain).toBe("xrpl");
       expect(config.output_format).toBe("table");
       expect(config.rlusd.xrpl_issuer).toBe(RLUSD_XRPL_ISSUER_TESTNET);
-      expect(config.rlusd.eth_contract).toBe(RLUSD_ETH_CONTRACT);
+      expect(config.rlusd.eth_contract).toBe(RLUSD_ETH_CONTRACT_TESTNET);
     });
 
     it("should persist the default config to disk", () => {
@@ -174,6 +175,7 @@ describe("Config System", () => {
       const config = setNetwork("mainnet");
       expect(config.environment).toBe("mainnet");
       expect(config.chains.xrpl.websocket).toBe("wss://xrplcluster.com/");
+      expect(config.rlusd.eth_contract).toBe(RLUSD_ETH_CONTRACT);
     });
 
     it("should switch to testnet", () => {
@@ -181,6 +183,7 @@ describe("Config System", () => {
       const config = setNetwork("testnet");
       expect(config.environment).toBe("testnet");
       expect(config.chains.xrpl.websocket).toContain("altnet.rippletest.net");
+      expect(config.rlusd.eth_contract).toBe(RLUSD_ETH_CONTRACT_TESTNET);
     });
 
     it("should switch to devnet", () => {

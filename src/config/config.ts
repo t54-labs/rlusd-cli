@@ -15,6 +15,8 @@ import {
   RLUSD_XRPL_ISSUER_TESTNET,
   RLUSD_XRPL_CURRENCY_HEX,
   RLUSD_ETH_CONTRACT,
+  RLUSD_ETH_CONTRACT_MAINNET,
+  RLUSD_ETH_CONTRACT_TESTNET,
   RLUSD_ETH_DECIMALS,
   CHAINLINK_RLUSD_USD_ORACLE,
   CONFIG_DIR,
@@ -72,6 +74,8 @@ function sanitizeFaucetConfig(
 function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
   const preset = getNetworkPreset(env);
   const xrplIssuer = env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER;
+  const ethContract =
+    env === "testnet" ? RLUSD_ETH_CONTRACT_TESTNET : RLUSD_ETH_CONTRACT_MAINNET;
   return {
     environment: env,
     default_chain: "xrpl",
@@ -80,7 +84,7 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
     rlusd: {
       xrpl_issuer: xrplIssuer,
       xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
-      eth_contract: RLUSD_ETH_CONTRACT,
+      eth_contract: ethContract,
       eth_decimals: RLUSD_ETH_DECIMALS,
       chainlink_oracle: CHAINLINK_RLUSD_USD_ORACLE,
     },
@@ -200,6 +204,8 @@ export function setNetwork(env: NetworkEnvironment): AppConfig {
     ...config.rlusd,
     xrpl_issuer: env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER,
     xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
+    eth_contract:
+      env === "testnet" ? RLUSD_ETH_CONTRACT_TESTNET : RLUSD_ETH_CONTRACT_MAINNET,
   };
   saveConfig(config);
   return config;

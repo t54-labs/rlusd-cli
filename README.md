@@ -34,6 +34,21 @@ A command-line interface for **Ripple USD (RLUSD)** operations across **XRP Ledg
 
 ## Installation
 
+## Network-Aware RLUSD Defaults
+
+The CLI switches official RLUSD asset identifiers by environment:
+
+| Environment | XRPL | Ethereum |
+|-------------|------|----------|
+| `mainnet` | official XRPL mainnet issuer | official Ethereum mainnet RLUSD proxy |
+| `testnet` | official XRPL testnet issuer | official Sepolia RLUSD proxy |
+
+That means commands like `balance`, `send`, `approve`, and `resolve` will use testnet RLUSD addresses automatically after:
+
+```bash
+rlusd config set --network testnet
+```
+
 ### npm (recommended)
 
 ```bash
