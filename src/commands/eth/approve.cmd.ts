@@ -252,7 +252,10 @@ export function registerEvmApproveCommand(parent: Command, program: Command): vo
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const password = resolveWalletPassword(opts.password, { machineReadable: true });
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
         const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
         const rpcUrl = config.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
@@ -339,6 +342,7 @@ async function runApprove(
 
   const pwd = resolveWalletPassword(password, {
     machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+    walletName: walletData.name,
   });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
 

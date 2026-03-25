@@ -219,7 +219,7 @@ async function getWalletContext(
   if (!walletData || isXrplWallet(walletData)) {
     throw new Error(`No EVM wallet for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
   }
-  const pwd = resolveWalletPassword(password);
+  const pwd = resolveWalletPassword(password, { walletName: walletData.name });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
   const viemChain = getViemChain(chain, config.environment);
   const rpcUrl = config.chains[chain]?.rpc;

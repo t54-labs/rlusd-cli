@@ -167,7 +167,10 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
           throw new Error(`Selected wallet address ${walletData.address} does not match prepared signer ${signerAddress}.`);
         }
 
-        const password = resolveWalletPassword(opts.password, { machineReadable: true });
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient(resolved.network);
         const txJson = (plan.data.intent as { tx_json?: TrustSet }).tx_json;
@@ -235,6 +238,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
 
         const password = resolveWalletPassword(opts.password, {
           machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+          walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
@@ -360,6 +364,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
 
         const password = resolveWalletPassword(opts.password, {
           machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+          walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();

@@ -143,6 +143,7 @@ describe("Command Registration", () => {
     expect(subcommands).toContain("list");
     expect(subcommands).toContain("address");
     expect(subcommands).toContain("use");
+    expect(subcommands).toContain("keychain");
   });
 
   it("should register config subcommands", () => {

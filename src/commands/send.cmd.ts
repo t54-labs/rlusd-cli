@@ -231,7 +231,10 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const password = resolveWalletPassword(opts.password, { machineReadable: true });
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
         const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
         const rpcUrl = config.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
@@ -322,6 +325,7 @@ async function sendXrpl(
 
   const password = resolveWalletPassword(opts.password, {
     machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+    walletName: walletData.name,
   });
   const wallet = restoreXrplWallet(walletData as StoredXrplWallet, password);
   const client = await getXrplClient();
@@ -414,6 +418,7 @@ async function sendEvm(
 
   const password = resolveWalletPassword(opts.password, {
     machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+    walletName: walletData.name,
   });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
 

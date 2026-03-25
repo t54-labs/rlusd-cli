@@ -206,7 +206,10 @@ export function registerPaymentCommand(parent: Command, program: Command): void 
           walletName,
           optionName: "--wallet",
         }) as StoredXrplWallet;
-        const password = resolveWalletPassword(opts.password, { machineReadable: true });
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient(resolved.network);
         const txJson = (plan.data.intent as { tx_json?: Payment }).tx_json;

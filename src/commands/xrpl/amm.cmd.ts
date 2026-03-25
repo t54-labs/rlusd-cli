@@ -101,7 +101,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -159,7 +161,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -231,7 +235,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -283,7 +289,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);

@@ -80,7 +80,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -137,7 +139,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -199,7 +203,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          walletName: walletData.name,
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 

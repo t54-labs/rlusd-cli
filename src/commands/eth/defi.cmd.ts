@@ -71,7 +71,7 @@ async function getWalletWriteContext(
     throw new Error(`RPC not configured for ${chain}`);
   }
 
-  const pwd = resolveWalletPassword(password);
+  const pwd = resolveWalletPassword(password, { walletName: walletData.name });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
   const viemChain = getViemChain(chain, config.environment);
   const account = privateKeyToAccount(privateKey as `0x${string}`);
@@ -742,7 +742,10 @@ export function registerTopLevelDefiCommand(program: Command): void {
           throw new Error(`RPC not configured for ${resolved.chain}`);
         }
 
-        const password = resolveWalletPassword(opts.password, { machineReadable: true });
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
         const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
         const account = privateKeyToAccount(privateKey as `0x${string}`);
         const walletClient = createWalletClient({

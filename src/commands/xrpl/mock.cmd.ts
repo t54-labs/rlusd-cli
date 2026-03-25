@@ -242,7 +242,6 @@ export function registerMockCommand(parent: Command, program: Command): void {
       }
 
       try {
-        const password = resolveWalletPassword(opts.password);
         const record = readMockRecord(getMockRecordPath(opts.record));
         const issuerWalletName = opts.issuerWallet || record?.issuer_wallet_name;
         if (!issuerWalletName) {
@@ -255,6 +254,9 @@ export function registerMockCommand(parent: Command, program: Command): void {
         if (!walletData || walletData.chain !== "xrpl") {
           throw new Error(`XRPL issuer wallet '${issuerWalletName}' was not found.`);
         }
+        const password = resolveWalletPassword(opts.password, {
+          walletName: issuerWalletName,
+        });
 
         const trustline = await getXrplTrustlineStatus(
           config.environment as "mainnet" | "testnet" | "devnet",
@@ -302,7 +304,6 @@ export function registerMockCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       const config = loadConfig();
       try {
-        const password = resolveWalletPassword(opts.password);
         const record = readMockRecord(getMockRecordPath(opts.record));
         const issuerWalletName = opts.issuerWallet || record?.issuer_wallet_name;
         if (!issuerWalletName) {
@@ -315,6 +316,9 @@ export function registerMockCommand(parent: Command, program: Command): void {
         if (!walletData || walletData.chain !== "xrpl") {
           throw new Error(`XRPL issuer wallet '${issuerWalletName}' was not found.`);
         }
+        const password = resolveWalletPassword(opts.password, {
+          walletName: issuerWalletName,
+        });
 
         const issuerWallet = restoreXrplWallet(walletData, password);
         const defaultAmount = String(opts.defaultAmount);
