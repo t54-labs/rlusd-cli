@@ -19,6 +19,23 @@ describe("CLI Program", () => {
     expect(program.opts().output).toBe("json");
   });
 
+  it("should accept --json as a machine output flag", () => {
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => undefined;
+    console.error = () => undefined;
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(["--json", "config", "get"], { from: "user" });
+      expect(program.opts().json).toBe(true);
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+  });
+
   it("should default --output to table", () => {
     const program = createProgram();
     program.exitOverride();

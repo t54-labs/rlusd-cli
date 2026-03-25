@@ -15,10 +15,23 @@ import { registerApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
+import { beginAgentCapture, endAgentCapture, isAgentCaptureActive } from "./agent/envelope.js";
 import { logger } from "./utils/logger.js";
 import packageJson from "../package.json";
 
 const VERSION = packageJson.version;
+
+function getCommandPath(actionCommand: Command): string {
+  const segments: string[] = [];
+  let current: Command | null = actionCommand;
+
+  while (current && current.parent) {
+    segments.unshift(current.name());
+    current = current.parent;
+  }
+
+  return segments.join(" ");
+}
 
 export function createProgram(): Command {
   const program = new Command();
@@ -34,21 +47,32 @@ export function createProgram(): Command {
       "target chain: xrpl | ethereum | base | optimism | ink | unichain",
     )
     .option("--output <format>", "output format: table | json | json-compact", "table")
+    .option("--json", "emit machine-readable agent envelopes")
     .option("--network <network>", "override network: mainnet | testnet | devnet")
     .option("--verbose", "show detailed output")
     .allowUnknownOption(false);
 
-  program.hook("preAction", (thisCommand) => {
-    const opts = thisCommand.optsWithGlobals();
+  program.hook("preAction", (thisCommand, actionCommand) => {
+    const opts = actionCommand.optsWithGlobals();
+    const machineJson = Boolean(opts.json);
+
+    if (machineJson) {
+      thisCommand.setOptionValueWithSource("output", "json", "implied");
+      actionCommand.setOptionValueWithSource("output", "json", "implied");
+      beginAgentCapture(getCommandPath(actionCommand));
+    }
+
     if (opts.network && !["mainnet", "testnet", "devnet"].includes(opts.network)) {
       logger.error(`Invalid --network value: ${opts.network}. Use mainnet, testnet, or devnet.`);
       process.exitCode = 1;
       return;
     }
+
     process.env.RLUSD_RUNTIME_NETWORK = opts.network || "";
-    process.env.RLUSD_RUNTIME_OUTPUT = opts.output || "";
+    process.env.RLUSD_RUNTIME_OUTPUT = machineJson ? "json" : (opts.output || "");
     process.env.RLUSD_RUNTIME_CHAIN = opts.chain || "";
     logger.setVerbose(Boolean(opts.verbose));
+
     if (opts.verbose) {
       logger.debug(
         `runtime overrides => chain=${opts.chain || "none"}, output=${opts.output || "none"}, network=${opts.network || "none"}`,
@@ -57,6 +81,9 @@ export function createProgram(): Command {
   });
 
   program.hook("postAction", () => {
+    if (isAgentCaptureActive()) {
+      endAgentCapture();
+    }
     delete process.env.RLUSD_RUNTIME_NETWORK;
     delete process.env.RLUSD_RUNTIME_OUTPUT;
     delete process.env.RLUSD_RUNTIME_CHAIN;

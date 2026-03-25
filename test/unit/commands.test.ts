@@ -110,6 +110,62 @@ describe("Command Registration", () => {
 const { detectChainFromAddress } = await import("../../src/utils/address.js");
 const { CHAINLINK_AGGREGATOR_ABI } = await import("../../src/abi/chainlink-aggregator.js");
 
+describe("Agent JSON Contract", () => {
+  let stdout: string[];
+  let stderr: string[];
+  const originalLog = console.log;
+  const originalError = console.error;
+
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+    stdout = [];
+    stderr = [];
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+  });
+
+  afterEach(() => {
+    console.log = originalLog;
+    console.error = originalError;
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should emit a shared success envelope with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "config", "get"], { from: "user" });
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe("config get");
+    expect(envelope.timestamp).toEqual(expect.any(String));
+    expect(envelope.data.environment).toBe("testnet");
+    expect(envelope.data.rlusd).toBeDefined();
+    expect(envelope.warnings).toEqual([]);
+    expect(envelope.next).toEqual([]);
+  });
+
+  it("should emit structured JSON errors to stderr with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "config", "set", "--network", "invalid"], { from: "user" });
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe("config set");
+    expect(envelope.timestamp).toEqual(expect.any(String));
+    expect(envelope.error.code).toEqual(expect.any(String));
+    expect(envelope.error.message).toContain("Invalid network");
+  });
+});
+
 describe("Send Command Address Detection", () => {
   it("should detect XRPL chain from r-address", () => {
     expect(detectChainFromAddress("rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De")).toBe("xrpl");
