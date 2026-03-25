@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { loadConfig } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
-import type { OutputFormat } from "../types/index.js";
+import type { ChainName, OutputFormat } from "../types/index.js";
 
 type ResolvedAssetRecord = {
   symbol: string;
@@ -17,7 +17,12 @@ type ResolvedAssetRecord = {
   address_type?: string;
 };
 
-function normalizeChainLabel(raw: string, environment: string): string {
+const VALID_CHAINS: ChainName[] = ["xrpl", "ethereum", "base", "optimism", "ink", "unichain"];
+
+function normalizeChainLabel(raw: string, environment: string): string | null {
+  const base = raw.includes("-") ? raw.split("-")[0] : raw;
+  if (!VALID_CHAINS.includes(base as ChainName)) return null;
+
   if (raw.includes("-")) return raw;
   if (raw === "xrpl") {
     return `xrpl-${environment}`;
@@ -74,12 +79,12 @@ export function registerResolveCommand(program: Command): void {
         return;
       }
       const chainLabel = normalizeChainLabel(chainInput, config.environment);
-      const data = resolveRlusdAsset(chainLabel, config);
-
-      if (outputFormat === "json" || outputFormat === "json-compact") {
-        logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
+      if (!chainLabel) {
+        logger.error(`Invalid chain: ${chainInput}. Valid: ${VALID_CHAINS.join(", ")}`);
+        process.exitCode = 1;
         return;
       }
+      const data = resolveRlusdAsset(chainLabel, config);
 
       logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
     });
