@@ -291,6 +291,78 @@ describe("Ethereum Command Registration", () => {
   });
 });
 
+describe("Ethereum Swap Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should register swap subcommands under eth", () => {
+    const program = createProgram();
+    const ethCmd = program.commands.find((c) => c.name() === "eth");
+    const swapCmd = ethCmd!.commands.find((c) => c.name() === "swap");
+    expect(swapCmd).toBeDefined();
+
+    const subcommands = swapCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("sell");
+    expect(subcommands).toContain("buy");
+    expect(subcommands).toContain("quote");
+    expect(subcommands).toContain("tokens");
+  });
+
+  it("should have required options on swap sell", () => {
+    const program = createProgram();
+    const ethCmd = program.commands.find((c) => c.name() === "eth");
+    const swapCmd = ethCmd!.commands.find((c) => c.name() === "swap");
+    const sellCmd = swapCmd!.commands.find((c) => c.name() === "sell");
+    expect(sellCmd).toBeDefined();
+
+    const optionNames = sellCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain("--amount");
+    expect(optionNames).toContain("--for");
+    expect(optionNames).toContain("--slippage");
+    expect(optionNames).toContain("--fee-tier");
+    expect(optionNames).toContain("--dry-run");
+  });
+});
+
+describe("Uniswap Router ABI", () => {
+  it("should include exactInputSingle and exactOutputSingle", async () => {
+    const { UNISWAP_V3_ROUTER_ABI } = await import("../../src/abi/uniswap-router.js");
+    const fnNames = UNISWAP_V3_ROUTER_ABI.filter((i) => i.type === "function").map((i) => i.name);
+    expect(fnNames).toContain("exactInputSingle");
+    expect(fnNames).toContain("exactOutputSingle");
+  });
+
+  it("should include QuoterV2 ABI with quoteExactInputSingle", async () => {
+    const { UNISWAP_QUOTER_V2_ABI } = await import("../../src/abi/uniswap-router.js");
+    const fnNames = UNISWAP_QUOTER_V2_ABI.filter((i) => i.type === "function").map((i) => i.name);
+    expect(fnNames).toContain("quoteExactInputSingle");
+  });
+});
+
+describe("Well-Known Tokens", () => {
+  it("should include major tokens", async () => {
+    const { WELL_KNOWN_TOKENS } = await import("../../src/config/constants.js");
+    expect(WELL_KNOWN_TOKENS.WETH).toBeDefined();
+    expect(WELL_KNOWN_TOKENS.USDC).toBeDefined();
+    expect(WELL_KNOWN_TOKENS.USDT).toBeDefined();
+    expect(WELL_KNOWN_TOKENS.DAI).toBeDefined();
+    expect(WELL_KNOWN_TOKENS.WBTC).toBeDefined();
+    expect(WELL_KNOWN_TOKENS.RLUSD).toBeDefined();
+  });
+
+  it("should have correct USDC decimals", async () => {
+    const { WELL_KNOWN_TOKENS } = await import("../../src/config/constants.js");
+    expect(WELL_KNOWN_TOKENS.USDC.decimals).toBe(6);
+    expect(WELL_KNOWN_TOKENS.WETH.decimals).toBe(18);
+  });
+});
+
 describe("Aave Pool ABI", () => {
   it("should include core pool functions", async () => {
     const { AAVE_POOL_ABI } = await import("../../src/abi/aave-pool.js");

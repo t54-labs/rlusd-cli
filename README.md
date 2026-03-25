@@ -6,12 +6,13 @@ A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin opera
 
 - **Multi-chain balance** — View RLUSD holdings across all supported chains in one command
 - **Unified transfers** — Send RLUSD on XRPL or Ethereum with a single `send` command
+- **DEX trading on both chains** — XRPL native DEX order book + Uniswap V3 swaps on Ethereum
+- **AMM liquidity** — Deposit, withdraw, and vote on XRPL AMM pools
+- **Aave lending** — Supply/borrow RLUSD on Aave V3
 - **Cross-chain bridging** — Transfer RLUSD between Ethereum and L2s via Wormhole NTT
-- **XRPL DeFi** — Trade on the XRPL DEX, provide AMM liquidity, manage trust lines
-- **Ethereum DeFi** — Supply/borrow RLUSD on Aave, manage ERC-20 approvals
-- **Price oracle** — Real-time RLUSD pricing from Chainlink
+- **Price oracle** — Real-time RLUSD pricing from Chainlink and XRPL DEX
 - **Script-friendly** — JSON output mode for automation and CI/CD pipelines
-- **Secure key storage** — AES-256-GCM encrypted wallet files
+- **Secure key storage** — AES-256-GCM encrypted wallet files with PBKDF2 key derivation
 
 ## Supported Chains
 
@@ -32,6 +33,12 @@ A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin opera
 npm install -g @rlusd/cli
 ```
 
+### One-line installer
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/xxx/rlusd-cli/main/scripts/install.sh | bash
+```
+
 ### From source
 
 ```bash
@@ -45,79 +52,619 @@ npm link
 ## Quick Start
 
 ```bash
-# Configure the network
+# 1. Switch to testnet
 rlusd config set --network testnet
 
-# Generate wallets
-rlusd wallet generate --chain xrpl
-rlusd wallet generate --chain ethereum
+# 2. Generate wallets for both chains
+rlusd wallet generate --chain xrpl --name my-xrpl --password mypassword
+rlusd wallet generate --chain ethereum --name my-eth --password mypassword
 
-# Get test funds
+# 3. Fund your XRPL wallet from the testnet faucet
 rlusd faucet fund --chain xrpl
 
-# Check balances across all chains
+# 4. Set up RLUSD trust line on XRPL (required before receiving RLUSD)
+rlusd xrpl trustline setup --password mypassword
+
+# 5. Check balances across all chains
 rlusd balance --all
 
-# Send RLUSD
-rlusd send --chain xrpl --to rDestination... --amount 100
+# 6. Send RLUSD to someone
+rlusd send --to rDestination... --amount 100 --password mypassword
 
-# View RLUSD price
+# 7. Check RLUSD price
 rlusd price
 ```
 
-## Command Overview
+---
 
-| Command Group | Description |
-|--------------|-------------|
-| `rlusd config` | Configuration management |
-| `rlusd wallet` | Wallet generation, import, and management |
-| `rlusd balance` | Multi-chain RLUSD balance queries |
-| `rlusd send` | Send RLUSD on any supported chain |
-| `rlusd bridge` | Cross-chain RLUSD transfers (Wormhole NTT) |
-| `rlusd price` | RLUSD price from oracles and DEXs |
-| `rlusd market` | Aggregated market data |
-| `rlusd tx` | Transaction status and history |
-| `rlusd faucet` | Testnet faucet operations |
-| `rlusd xrpl` | XRPL-specific: trust lines, DEX, AMM |
-| `rlusd eth` | Ethereum-specific: approvals, Aave DeFi |
+## Command Reference
 
-Run `rlusd --help` or `rlusd <command> --help` for detailed usage.
+### Global Options
+
+Every command supports these flags:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--chain <chain>` | Target chain: `xrpl`, `ethereum`, `base`, `optimism`, `ink`, `unichain` | Per-command or from config |
+| `--output <format>` | Output format: `table`, `json`, `json-compact` | `table` |
+| `--network <network>` | Override network: `mainnet`, `testnet`, `devnet` | From config |
+| `--verbose` | Show detailed output | off |
+| `--version` | Print version | — |
+| `--help` | Print help | — |
+
+---
+
+### `rlusd config` — Configuration Management
+
+Manages the CLI configuration stored at `~/.config/rlusd-cli/config.yml`.
+
+#### `rlusd config get`
+
+Display all current settings: environment, default chain, RPC endpoints, RLUSD contract addresses.
+
+```bash
+rlusd config get                    # human-readable table
+rlusd config get --output json      # machine-readable JSON
+```
+
+#### `rlusd config set`
+
+Update one or more settings. Changes are persisted immediately.
+
+```bash
+# Switch between mainnet / testnet / devnet (updates all chain endpoints)
+rlusd config set --network mainnet
+rlusd config set --network testnet
+rlusd config set --network devnet
+
+# Set a custom RPC endpoint for a specific chain
+rlusd config set --chain ethereum --rpc https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
+rlusd config set --chain xrpl --rpc wss://xrplcluster.com/
+
+# Change the default chain for commands that don't specify --chain
+rlusd config set --default-chain ethereum
+
+# Change default output format
+rlusd config set --format json
+```
+
+---
+
+### `rlusd wallet` — Wallet Management
+
+Manages encrypted wallet files stored at `~/.config/rlusd-cli/wallets/`.
+
+#### `rlusd wallet generate`
+
+Create a new wallet with a random keypair.
+
+```bash
+# Generate an XRPL wallet (ed25519 by default)
+rlusd wallet generate --chain xrpl --name my-xrpl --password s3cret
+
+# Generate with secp256k1 algorithm
+rlusd wallet generate --chain xrpl --algorithm secp256k1 --name my-xrpl-secp
+
+# Generate an Ethereum wallet (works for all EVM chains)
+rlusd wallet generate --chain ethereum --name my-eth --password s3cret
+```
+
+#### `rlusd wallet import`
+
+Import an existing wallet from a secret, private key, or mnemonic.
+
+```bash
+# Import XRPL wallet from seed/secret
+rlusd wallet import --chain xrpl --secret sEdXXXXXXXX --name imported-xrpl --password s3cret
+
+# Import EVM wallet from private key
+rlusd wallet import --chain ethereum --private-key 0xabcdef... --name imported-eth --password s3cret
+
+# Import EVM wallet from BIP-39 mnemonic
+rlusd wallet import --chain ethereum --mnemonic "word1 word2 word3 ..." --name mnemonic-eth --password s3cret
+```
+
+#### `rlusd wallet list`
+
+Show all stored wallets with their chain, address, and creation date.
+
+```bash
+rlusd wallet list
+rlusd wallet list --output json
+```
+
+#### `rlusd wallet address`
+
+Print the address of the currently active wallet for a chain.
+
+```bash
+rlusd wallet address                  # default chain
+rlusd wallet address --chain ethereum # specific chain
+```
+
+#### `rlusd wallet use <name>`
+
+Switch the default wallet for a chain.
+
+```bash
+rlusd wallet use my-xrpl --chain xrpl
+rlusd wallet use my-eth --chain ethereum
+```
+
+---
+
+### `rlusd balance` — Balance Queries
+
+#### `rlusd balance`
+
+Query RLUSD balance for the current wallet on one chain.
+
+```bash
+rlusd balance                           # default chain
+rlusd balance --chain ethereum          # specific chain
+rlusd balance --chain xrpl --output json
+rlusd balance --address rSomeAddress... # query any address
+```
+
+#### `rlusd balance --all`
+
+Aggregated view across **all** configured chains in a single table.
+
+```bash
+rlusd balance --all
+# ┌───────────┬────────────────┬──────────────┬────────────────┐
+# │ chain     │ address        │ rlusd        │ native         │
+# ├───────────┼────────────────┼──────────────┼────────────────┤
+# │ xrpl      │ rAbc...xyz     │ 1,500.00     │ 245.3 XRP      │
+# │ ethereum  │ 0xAbc...789    │ 3,200.50     │ 0.15 ETH       │
+# ├───────────┼────────────────┼──────────────┼────────────────┤
+# │ Total RLUSD: 4,700.50                                      │
+# └────────────────────────────────────────────────────────────┘
+```
+
+#### `rlusd gas-balance`
+
+Show native token balances (XRP, ETH) needed for paying transaction fees.
+
+```bash
+rlusd gas-balance
+```
+
+---
+
+### `rlusd send` — Transfer RLUSD
+
+Send RLUSD to a recipient on any supported chain. Automatically detects the target chain from the address format (`r...` → XRPL, `0x...` → Ethereum).
+
+```bash
+# Send on XRPL (auto-detected from r-address)
+rlusd send --to rRecipient... --amount 100 --password s3cret
+
+# Send on XRPL with destination tag and memo
+rlusd send --to rRecipient... --amount 50 --tag 12345 --memo "invoice #42" --password s3cret
+
+# Send on Ethereum (auto-detected from 0x-address)
+rlusd send --to 0xRecipient... --amount 200 --password s3cret
+
+# Explicit chain selection
+rlusd send --chain base --to 0xRecipient... --amount 100 --password s3cret
+
+# Preview without submitting
+rlusd send --to rRecipient... --amount 100 --password s3cret --dry-run
+```
+
+| Option | Description |
+|--------|-------------|
+| `--to <address>` | **(required)** Recipient address |
+| `--amount <n>` | **(required)** RLUSD amount to send |
+| `--chain <chain>` | Override chain auto-detection |
+| `--tag <n>` | XRPL destination tag (integer) |
+| `--memo <text>` | Transaction memo text |
+| `--password <pwd>` | Wallet decryption password |
+| `--dry-run` | Preview the transaction without submitting |
+
+---
+
+### `rlusd xrpl trustline` — XRPL Trust Line Management
+
+XRPL requires a trust line to the RLUSD issuer before your account can hold RLUSD.
+
+#### `rlusd xrpl trustline setup`
+
+Create or update the RLUSD trust line. This is a **one-time operation** per account.
+
+```bash
+rlusd xrpl trustline setup --password s3cret
+rlusd xrpl trustline setup --limit 500000 --password s3cret   # custom limit
+```
+
+#### `rlusd xrpl trustline status`
+
+Check if the RLUSD trust line exists and show its current balance, limit, and freeze status.
+
+```bash
+rlusd xrpl trustline status
+rlusd xrpl trustline status --address rSomeAddress...
+```
+
+#### `rlusd xrpl trustline remove`
+
+Remove the trust line (only works if RLUSD balance is zero).
+
+```bash
+rlusd xrpl trustline remove --password s3cret
+```
+
+---
+
+### `rlusd xrpl dex` — XRPL Native DEX Trading
+
+Trade RLUSD on the XRP Ledger's built-in decentralized exchange (order book model).
+
+#### `rlusd xrpl dex buy`
+
+Place a limit order to **buy RLUSD with XRP**.
+
+```bash
+# Buy 100 RLUSD, willing to pay up to 2.5 XRP per RLUSD
+rlusd xrpl dex buy --amount 100 --price 2.5 --password s3cret
+```
+
+#### `rlusd xrpl dex sell`
+
+Place a limit order to **sell RLUSD for XRP**.
+
+```bash
+# Sell 50 RLUSD, asking 2.6 XRP per RLUSD
+rlusd xrpl dex sell --amount 50 --price 2.6 --password s3cret
+```
+
+#### `rlusd xrpl dex cancel`
+
+Cancel an open order by its sequence number.
+
+```bash
+rlusd xrpl dex cancel --sequence 12345 --password s3cret
+```
+
+#### `rlusd xrpl dex orderbook`
+
+Display the live XRP/RLUSD order book (both bid and ask sides, top 15 offers each).
+
+```bash
+rlusd xrpl dex orderbook
+rlusd xrpl dex orderbook --output json
+```
+
+---
+
+### `rlusd xrpl amm` — XRPL AMM Liquidity Pool
+
+Interact with the XRP/RLUSD Automated Market Maker pool on XRPL.
+
+#### `rlusd xrpl amm info`
+
+Show pool state: reserves, trading fee, LP token supply, vote slots.
+
+```bash
+rlusd xrpl amm info
+rlusd xrpl amm info --output json
+```
+
+#### `rlusd xrpl amm deposit`
+
+Add two-asset liquidity to the pool. You receive LP tokens in return.
+
+```bash
+rlusd xrpl amm deposit --xrp 100 --rlusd 150 --password s3cret
+```
+
+#### `rlusd xrpl amm withdraw`
+
+Redeem LP tokens to withdraw assets from the pool.
+
+```bash
+rlusd xrpl amm withdraw --lp-tokens 50 --password s3cret
+```
+
+#### `rlusd xrpl amm vote`
+
+Vote on the pool's trading fee (in units of 1/100,000; max 1000 = 1%).
+
+```bash
+rlusd xrpl amm vote --fee 300 --password s3cret   # vote for 0.3%
+```
+
+#### `rlusd xrpl amm swap`
+
+Swap XRP → RLUSD through the AMM (single-asset deposit).
+
+```bash
+rlusd xrpl amm swap --sell-xrp 10 --password s3cret
+```
+
+---
+
+### `rlusd xrpl pathfind` — Cross-Currency Path Finding
+
+Find the best payment paths to deliver RLUSD to a destination, potentially converting from other currencies.
+
+```bash
+rlusd xrpl pathfind --to rDestination... --amount 100 --password s3cret
+rlusd xrpl pathfind --to rDestination... --amount 100 --password s3cret --output json
+```
+
+---
+
+### `rlusd eth approve` — ERC-20 Approval Management
+
+Manage third-party spending permissions for your RLUSD on Ethereum/EVM chains.
+
+#### `rlusd eth approve`
+
+Grant a contract (e.g., Aave Pool, Uniswap Router) permission to spend your RLUSD.
+
+```bash
+rlusd eth approve --spender 0xContractAddr... --amount 1000 --password s3cret
+```
+
+#### `rlusd eth allowance`
+
+Check how much RLUSD a spender is currently approved to use.
+
+```bash
+rlusd eth allowance --spender 0xContractAddr...
+```
+
+#### `rlusd eth revoke`
+
+Revoke a spender's approval (sets allowance to 0).
+
+```bash
+rlusd eth revoke --spender 0xContractAddr... --password s3cret
+```
+
+---
+
+### `rlusd eth swap` — Uniswap V3 Token Swaps
+
+Swap RLUSD for other tokens (or buy RLUSD with other tokens) via Uniswap V3 on Ethereum.
+
+**Supported tokens**: WETH, USDC, USDT, DAI, WBTC, or any ERC-20 by contract address.
+
+#### `rlusd eth swap sell`
+
+Sell RLUSD for another token.
+
+```bash
+# Sell 500 RLUSD for USDC
+rlusd eth swap sell --amount 500 --for USDC --password s3cret
+
+# Sell with custom slippage and fee tier
+rlusd eth swap sell --amount 100 --for WETH --slippage 100 --fee-tier 3000 --password s3cret
+
+# Preview without executing
+rlusd eth swap sell --amount 500 --for USDC --dry-run
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--amount <n>` | **(required)** RLUSD amount to sell | — |
+| `--for <token>` | **(required)** Token to receive (`USDC`, `WETH`, `0x...`) | — |
+| `--slippage <bps>` | Max slippage in basis points | `50` (0.5%) |
+| `--fee-tier <fee>` | Uniswap pool fee: `100`, `500`, `3000`, `10000` | `3000` (0.3%) |
+| `--password <pwd>` | Wallet decryption password | — |
+| `--dry-run` | Preview without submitting | off |
+
+#### `rlusd eth swap buy`
+
+Buy RLUSD with another token.
+
+```bash
+# Buy 1000 RLUSD, paying with USDC
+rlusd eth swap buy --amount 1000 --with USDC --password s3cret
+
+# Buy RLUSD with WETH
+rlusd eth swap buy --amount 500 --with WETH --password s3cret
+```
+
+#### `rlusd eth swap quote`
+
+Get a price quote without executing a transaction.
+
+```bash
+rlusd eth swap quote --amount 500 --for USDC
+rlusd eth swap quote --amount 1000 --for WETH --fee-tier 500
+```
+
+#### `rlusd eth swap tokens`
+
+List all well-known tokens with their contract addresses.
+
+```bash
+rlusd eth swap tokens
+```
+
+---
+
+### `rlusd eth defi aave` — Aave V3 Lending & Borrowing
+
+Supply RLUSD to Aave V3 to earn interest, or borrow against your collateral.
+
+#### `rlusd eth defi aave supply`
+
+Deposit RLUSD into Aave to earn supply APR.
+
+```bash
+rlusd eth defi aave supply --amount 1000 --password s3cret
+```
+
+#### `rlusd eth defi aave withdraw`
+
+Withdraw your supplied RLUSD from Aave.
+
+```bash
+rlusd eth defi aave withdraw --amount 500 --password s3cret
+rlusd eth defi aave withdraw --max --password s3cret    # withdraw everything
+```
+
+#### `rlusd eth defi aave borrow`
+
+Borrow RLUSD against your Aave collateral (variable rate).
+
+```bash
+rlusd eth defi aave borrow --amount 200 --password s3cret
+```
+
+#### `rlusd eth defi aave repay`
+
+Repay borrowed RLUSD.
+
+```bash
+rlusd eth defi aave repay --amount 200 --password s3cret
+rlusd eth defi aave repay --max --password s3cret       # repay full debt
+```
+
+#### `rlusd eth defi aave status`
+
+Show your Aave position: total collateral, debt, available borrows, health factor.
+
+```bash
+rlusd eth defi aave status
+rlusd eth defi aave status --output json
+```
+
+---
+
+### `rlusd price` — RLUSD Price Oracle
+
+Query RLUSD price from multiple sources.
+
+```bash
+# Default: Chainlink oracle on Ethereum
+rlusd price
+
+# Chainlink oracle explicitly
+rlusd price --source chainlink
+
+# XRPL DEX order book price
+rlusd price --source dex
+
+# JSON output
+rlusd price --output json
+```
+
+---
+
+### `rlusd market` — Market Overview
+
+Aggregated market snapshot combining Chainlink price and XRPL DEX data.
+
+```bash
+rlusd market
+rlusd market --output json
+```
+
+---
+
+### `rlusd tx` — Transaction Queries
+
+#### `rlusd tx status <hash>`
+
+Look up a transaction by hash on any chain.
+
+```bash
+rlusd tx status ABC123... --chain xrpl
+rlusd tx status 0xabc123... --chain ethereum
+```
+
+#### `rlusd tx history`
+
+Show recent RLUSD transactions for the current wallet.
+
+```bash
+rlusd tx history                          # default chain, last 20
+rlusd tx history --chain ethereum --limit 50
+rlusd tx history --output json
+```
+
+---
+
+### `rlusd faucet fund` — Testnet Faucet
+
+Request test tokens (testnet and devnet only).
+
+```bash
+# Get test XRP on XRPL testnet
+rlusd faucet fund --chain xrpl
+
+# Displays faucet URLs for Ethereum Sepolia
+rlusd faucet fund --chain ethereum
+```
+
+---
+
+### `rlusd bridge` — Cross-Chain Bridge (Wormhole NTT)
+
+Transfer RLUSD between Ethereum and L2 networks via Wormhole Native Token Transfers.
+
+> **Current status**: Wormhole NTT for RLUSD on L2s is in testing. XRPL ↔ EVM bridging is not supported by Wormhole NTT.
+
+```bash
+rlusd bridge --from ethereum --to base --amount 500
+rlusd bridge estimate --from ethereum --to optimism --amount 1000
+rlusd bridge status <transfer-id>
+rlusd bridge history
+```
+
+---
+
+### `rlusd completion` — Shell Auto-Completion
+
+Generate completion scripts for your shell.
+
+```bash
+# Bash (add to ~/.bashrc)
+rlusd completion --shell bash >> ~/.bashrc
+
+# Zsh (add to ~/.zshrc)
+rlusd completion --shell zsh >> ~/.zshrc
+
+# Fish
+rlusd completion --shell fish > ~/.config/fish/completions/rlusd.fish
+```
+
+---
 
 ## Documentation
 
-- [Framework & Architecture](docs/FRAMEWORK.md) — Detailed technical design, third-party integrations, and API references
-- [Contributing](docs/CONTRIBUTING.md) — How to contribute to the project
+- [Framework & Architecture](docs/FRAMEWORK.md) — Detailed technical design, third-party integration APIs, contract addresses
+- [Contributing](docs/CONTRIBUTING.md) — Development setup, testing guide, commit conventions
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Run in development mode
-npm run dev -- --help
-
-# Run tests
-npm test
-
-# Type checking
-npm run typecheck
-
-# Lint
-npm run lint
-
-# Build
-npm run build
+npm install          # install dependencies
+npm run dev -- --help # run in dev mode
+npm test             # run all tests (142+)
+npm run typecheck    # TypeScript type checking
+npm run lint         # ESLint
+npm run build        # production build
 ```
 
 ## Tech Stack
 
-- **Runtime**: Node.js ≥ 20, TypeScript
-- **XRPL SDK**: [xrpl.js](https://github.com/XRPLF/xrpl.js) v4.x
-- **EVM SDK**: [viem](https://viem.sh/) v2.x
-- **Cross-chain**: [Wormhole SDK](https://github.com/wormhole-foundation/wormhole-sdk-ts)
-- **DeFi**: [@aave/client](https://aave.com/docs/developers/aave-v3/getting-started/typescript)
-- **CLI Framework**: [Commander.js](https://github.com/tj/commander.js) v13.x
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js ≥ 20, TypeScript (ESM) |
+| XRPL | [xrpl.js](https://github.com/XRPLF/xrpl.js) v4.x |
+| Ethereum | [viem](https://viem.sh/) v2.x |
+| DEX (EVM) | Uniswap V3 SwapRouter02 |
+| Lending | Aave V3 Pool (raw contract calls) |
+| Cross-chain | [Wormhole SDK](https://github.com/wormhole-foundation/wormhole-sdk-ts) |
+| Price | Chainlink AggregatorV3 |
+| CLI | [Commander.js](https://github.com/tj/commander.js) v13.x |
+| Testing | Vitest |
 
 ## License
 

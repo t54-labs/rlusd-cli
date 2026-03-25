@@ -15,3 +15,15 @@ export const WALLETS_DIR = "wallets";
 
 export const XRPL_TESTNET_FAUCET = "https://faucet.altnet.rippletest.net/accounts";
 export const XRPL_DEVNET_FAUCET = "https://faucet.devnet.rippletest.net/accounts";
+
+export const UNISWAP_V3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
+export const UNISWAP_V3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
+
+export const WELL_KNOWN_TOKENS: Record<string, { address: string; decimals: number; name: string }> = {
+  WETH:  { address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18, name: "Wrapped Ether" },
+  USDC:  { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6,  name: "USD Coin" },
+  USDT:  { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6,  name: "Tether USD" },
+  DAI:   { address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18, name: "Dai Stablecoin" },
+  WBTC:  { address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8,  name: "Wrapped BTC" },
+  RLUSD: { address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", decimals: 18, name: "Ripple USD" },
+};

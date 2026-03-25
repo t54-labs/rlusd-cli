@@ -13,6 +13,7 @@ import { registerTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
 import { registerApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
+import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
 
 const VERSION = "0.1.0";
@@ -51,6 +52,7 @@ export function createProgram(): Command {
   const ethCmd = program.command("eth").description("Ethereum / EVM RLUSD token and DeFi commands");
   registerApproveCommand(ethCmd, program);
   registerDefiCommand(ethCmd, program);
+  registerSwapCommand(ethCmd, program);
 
   registerCompletionCommand(program);
 
