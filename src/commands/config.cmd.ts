@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { loadConfig, setNetwork, setChainRpc, setDefaultChain, setOutputFormat } from "../config/config.js";
+import { loadConfig, setNetwork, setChainRpc, setDefaultChain, setOutputFormat, setPriceApi, setContract, setFaucetUrl } from "../config/config.js";
 import { isValidNetwork } from "../config/networks.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
@@ -35,6 +35,27 @@ export function registerConfigCommand(program: Command): void {
         const endpoint = chainConfig.websocket || chainConfig.rpc || "not configured";
         logger.label(`Chain: ${chain}`, endpoint);
       }
+
+      if (config.price_api) {
+        logger.raw("");
+        logger.label("Price API Provider", config.price_api.provider);
+        logger.label("Price API URL", config.price_api.base_url);
+        if (config.price_api.api_key) {
+          logger.label("Price API Key", "***configured***");
+        }
+      }
+
+      if (config.contracts) {
+        for (const [chain, contracts] of Object.entries(config.contracts)) {
+          const entries = Object.entries(contracts).filter(([, v]) => v);
+          if (entries.length > 0) {
+            logger.raw("");
+            for (const [key, value] of entries) {
+              logger.label(`${chain} ${key}`, value as string);
+            }
+          }
+        }
+      }
     });
 
   configCmd
@@ -45,6 +66,13 @@ export function registerConfigCommand(program: Command): void {
     .option("--rpc <url>", "set RPC/WebSocket URL for a chain (requires --chain)")
     .option("--default-chain <chain>", "set default chain")
     .option("--format <format>", "set output format: table | json | json-compact")
+    .option("--price-provider <provider>", "price API provider: coingecko")
+    .option("--price-url <url>", "price API base URL (e.g. https://pro-api.coingecko.com/api/v3)")
+    .option("--price-api-key <key>", "price API key (for paid tiers)")
+    .option("--uniswap-router <address>", "Uniswap V3 SwapRouter address (requires --chain)")
+    .option("--uniswap-quoter <address>", "Uniswap V3 QuoterV2 address (requires --chain)")
+    .option("--aave-pool <address>", "Aave V3 Pool address (requires --chain)")
+    .option("--faucet-url <url>", "XRPL faucet URL (requires --network testnet|devnet)")
     .action((opts) => {
       let changed = false;
 
@@ -96,6 +124,48 @@ export function registerConfigCommand(program: Command): void {
         }
         setOutputFormat(opts.format);
         logger.success(`Output format set to ${opts.format}`);
+        changed = true;
+      }
+
+      if (opts.priceProvider || opts.priceUrl || opts.priceApiKey) {
+        const updates: Record<string, string> = {};
+        if (opts.priceProvider) updates.provider = opts.priceProvider;
+        if (opts.priceUrl) updates.base_url = opts.priceUrl;
+        if (opts.priceApiKey) updates.api_key = opts.priceApiKey;
+        setPriceApi(updates);
+        logger.success("Price API settings updated");
+        changed = true;
+      }
+
+      const contractChain = (opts.chain as ChainName | undefined) || (program.opts().chain as ChainName | undefined);
+      if (opts.uniswapRouter) {
+        if (!contractChain) { logger.error("--chain is required when setting --uniswap-router"); process.exitCode = 1; return; }
+        setContract(contractChain, "uniswap_router", opts.uniswapRouter);
+        logger.success(`Uniswap Router for ${contractChain} set to ${opts.uniswapRouter}`);
+        changed = true;
+      }
+      if (opts.uniswapQuoter) {
+        if (!contractChain) { logger.error("--chain is required when setting --uniswap-quoter"); process.exitCode = 1; return; }
+        setContract(contractChain, "uniswap_quoter", opts.uniswapQuoter);
+        logger.success(`Uniswap Quoter for ${contractChain} set to ${opts.uniswapQuoter}`);
+        changed = true;
+      }
+      if (opts.aavePool) {
+        if (!contractChain) { logger.error("--chain is required when setting --aave-pool"); process.exitCode = 1; return; }
+        setContract(contractChain, "aave_v3_pool", opts.aavePool);
+        logger.success(`Aave V3 Pool for ${contractChain} set to ${opts.aavePool}`);
+        changed = true;
+      }
+
+      if (opts.faucetUrl) {
+        const net = opts.network || program.opts().network;
+        if (!net || (net !== "testnet" && net !== "devnet")) {
+          logger.error("--network testnet or --network devnet is required when setting --faucet-url");
+          process.exitCode = 1;
+          return;
+        }
+        setFaucetUrl(net, opts.faucetUrl);
+        logger.success(`XRPL ${net} faucet URL set to ${opts.faucetUrl}`);
         changed = true;
       }
 

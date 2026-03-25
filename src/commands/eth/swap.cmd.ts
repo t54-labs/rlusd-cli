@@ -14,6 +14,7 @@ import {
   UNISWAP_V3_QUOTER_V2,
   WELL_KNOWN_TOKENS,
 } from "../../config/constants.js";
+import type { AppConfig } from "../../types/index.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment } from "../../types/index.js";
@@ -22,6 +23,14 @@ import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/
 
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 const DEFAULT_FEE_TIER = 3000; // 0.3% Uniswap pool fee
+
+function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0x${string}` {
+  return (config.contracts?.[chain]?.uniswap_router || UNISWAP_V3_SWAP_ROUTER) as `0x${string}`;
+}
+
+function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
+  return (config.contracts?.[chain]?.uniswap_quoter || UNISWAP_V3_QUOTER_V2) as `0x${string}`;
+}
 
 function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
   if (env === "mainnet") {
@@ -148,7 +157,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
         const fee = parseFeeTier(opts.feeTier);
 
         const result = await publicClient.simulateContract({
-          address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
+          address: resolveUniswapQuoter(chain, config),
           abi: UNISWAP_QUOTER_V2_ABI,
           functionName: "quoteExactInputSingle",
           args: [
@@ -251,14 +260,14 @@ async function executeSwapSell(
   outputFormat: OutputFormat,
 ): Promise<void> {
   const rlusdAddress = getRlusdContractAddress(chain, config);
-  const routerAddress = UNISWAP_V3_SWAP_ROUTER as `0x${string}`;
+  const routerAddress = resolveUniswapRouter(chain, config);
   const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const slippageBps = parseSlippageBps(opts.slippage);
   const fee = parseFeeTier(opts.feeTier);
 
   const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
   const quoteResult = await publicClient.simulateContract({
-    address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
+    address: resolveUniswapQuoter(chain, config),
     abi: UNISWAP_QUOTER_V2_ABI,
     functionName: "quoteExactInputSingle",
     args: [
@@ -342,6 +351,7 @@ async function executeSwapSell(
       logger.success(`Swapped ${opts.amount} RLUSD on Uniswap V3`);
     } else {
       logger.error("Swap transaction reverted");
+      process.exitCode = 1;
     }
     logger.label("Tx Hash", swapHash);
     logger.label("Gas Used", receipt.gasUsed.toString());
@@ -356,16 +366,15 @@ async function executeSwapBuy(
   outputFormat: OutputFormat,
 ): Promise<void> {
   const rlusdAddress = getRlusdContractAddress(chain, config);
-  const routerAddress = UNISWAP_V3_SWAP_ROUTER as `0x${string}`;
+  const routerAddress = resolveUniswapRouter(chain, config);
   const fee = parseFeeTier(opts.feeTier);
   const slippageBps = parseSlippageBps(opts.slippage);
 
   const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
 
-  // For buying RLUSD we use exactOutputSingle: specify the exact RLUSD we want to receive
   const amountOut = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const quoteResult = await publicClient.simulateContract({
-    address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
+    address: resolveUniswapQuoter(chain, config),
     abi: UNISWAP_QUOTER_V2_ABI,
     functionName: "quoteExactOutputSingle",
     args: [
@@ -449,6 +458,7 @@ async function executeSwapBuy(
       logger.success(`Bought ${opts.amount} RLUSD via Uniswap V3`);
     } else {
       logger.error("Swap transaction reverted");
+      process.exitCode = 1;
     }
     logger.label("Tx Hash", swapHash);
     logger.label("Gas Used", receipt.gasUsed.toString());

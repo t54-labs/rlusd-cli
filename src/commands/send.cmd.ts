@@ -255,6 +255,7 @@ async function sendEvm(
       logger.success(`Sent ${opts.amount} RLUSD to ${opts.to} on ${chain}`);
     } else {
       logger.error(`Transaction reverted on ${chain}`);
+      process.exitCode = 1;
     }
     logger.label("Tx Hash", hash);
   }

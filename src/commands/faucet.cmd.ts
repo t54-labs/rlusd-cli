@@ -4,6 +4,7 @@ import { getDefaultWallet } from "../wallet/manager.js";
 import { logger } from "../utils/logger.js";
 import { formatOutput } from "../utils/format.js";
 import { XRPL_TESTNET_FAUCET, XRPL_DEVNET_FAUCET } from "../config/constants.js";
+import type { AppConfig } from "../types/index.js";
 import type { ChainName, OutputFormat } from "../types/index.js";
 
 export function registerFaucetCommand(program: Command): void {
@@ -27,7 +28,7 @@ export function registerFaucetCommand(program: Command): void {
 
       try {
         if (chain === "xrpl") {
-          await fundXrpl(opts.address, config.environment, outputFormat);
+          await fundXrpl(opts.address, config.environment, outputFormat, config);
         } else {
           fundEvm(chain, opts.address);
         }
@@ -42,9 +43,12 @@ async function fundXrpl(
   addressOverride: string | undefined,
   env: string,
   outputFormat: OutputFormat,
+  config: AppConfig,
 ): Promise<void> {
   const address = addressOverride || getDefaultWallet("xrpl")?.address;
-  const faucetUrl = env === "devnet" ? XRPL_DEVNET_FAUCET : XRPL_TESTNET_FAUCET;
+  const faucetUrl = env === "devnet"
+    ? (config.faucet?.xrpl_devnet || XRPL_DEVNET_FAUCET)
+    : (config.faucet?.xrpl_testnet || XRPL_TESTNET_FAUCET);
 
   logger.info(`Requesting test XRP from ${env} faucet...`);
 

@@ -12,6 +12,9 @@ import {
   CONFIG_DIR,
   CONFIG_FILE,
   WALLETS_DIR,
+  DEFAULT_PRICE_API,
+  DEFAULT_CONTRACTS,
+  DEFAULT_FAUCET,
 } from "./constants.js";
 import { getNetworkPreset, isValidNetwork } from "./networks.js";
 
@@ -45,6 +48,9 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
       eth_decimals: RLUSD_ETH_DECIMALS,
       chainlink_oracle: CHAINLINK_RLUSD_USD_ORACLE,
     },
+    price_api: { ...DEFAULT_PRICE_API },
+    contracts: structuredClone(DEFAULT_CONTRACTS),
+    faucet: { ...DEFAULT_FAUCET },
   };
 }
 
@@ -114,12 +120,22 @@ export function loadConfig(): AppConfig {
     : "testnet";
   const defaultConfig = createDefaultConfig(environment);
 
+  const mergedContracts = { ...defaultConfig.contracts };
+  if (parsed.contracts) {
+    for (const [chain, overrides] of Object.entries(parsed.contracts)) {
+      mergedContracts[chain] = { ...mergedContracts[chain], ...overrides };
+    }
+  }
+
   return applyRuntimeOverrides({
     ...defaultConfig,
     ...parsed,
     environment,
     chains: { ...defaultConfig.chains, ...parsed.chains },
     rlusd: { ...defaultConfig.rlusd, ...parsed.rlusd },
+    price_api: { ...defaultConfig.price_api, ...parsed.price_api },
+    contracts: mergedContracts,
+    faucet: { ...defaultConfig.faucet, ...parsed.faucet },
   });
 }
 
@@ -163,6 +179,31 @@ export function setDefaultChain(chain: ChainName): AppConfig {
 export function setOutputFormat(format: OutputFormat): AppConfig {
   const config = loadConfig();
   config.output_format = format;
+  saveConfig(config);
+  return config;
+}
+
+export function setPriceApi(updates: { provider?: string; base_url?: string; api_key?: string }): AppConfig {
+  const config = loadConfig();
+  config.price_api = { ...config.price_api!, ...updates };
+  saveConfig(config);
+  return config;
+}
+
+export function setContract(chain: ChainName, field: string, address: string): AppConfig {
+  const config = loadConfig();
+  if (!config.contracts) config.contracts = {};
+  if (!config.contracts[chain]) config.contracts[chain] = {};
+  (config.contracts[chain] as Record<string, string>)[field] = address;
+  saveConfig(config);
+  return config;
+}
+
+export function setFaucetUrl(env: "testnet" | "devnet", url: string): AppConfig {
+  const config = loadConfig();
+  if (!config.faucet) config.faucet = { xrpl_testnet: "", xrpl_devnet: "" };
+  if (env === "testnet") config.faucet.xrpl_testnet = url;
+  else config.faucet.xrpl_devnet = url;
   saveConfig(config);
   return config;
 }

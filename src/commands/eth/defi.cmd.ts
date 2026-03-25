@@ -13,6 +13,11 @@ import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment } from "../../types/index.js";
 import { AAVE_V3_POOL_ETHEREUM } from "../../config/constants.js";
+import type { AppConfig } from "../../types/index.js";
+
+function resolveAavePool(chain: EvmChainName, config: AppConfig): `0x${string}` {
+  return (config.contracts?.[chain]?.aave_v3_pool || AAVE_V3_POOL_ETHEREUM) as `0x${string}`;
+}
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 
@@ -136,7 +141,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         assertEthereumAave(chain, config);
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
         const rlusd = getRlusdContractAddress(chain, config);
-        const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
+        const pool = resolveAavePool(chain, config);
         const dec = config.rlusd.eth_decimals;
         const amount = parseUnits(opts.amount, dec);
 
@@ -186,7 +191,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         }
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
         const rlusd = getRlusdContractAddress(chain, config);
-        const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
+        const pool = resolveAavePool(chain, config);
         const amount = parseAmountOrMax(opts.amount, Boolean(opts.max), config.rlusd.eth_decimals);
 
         const hash = await walletClient.writeContract({
@@ -223,7 +228,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         assertEthereumAave(chain, config);
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
         const rlusd = getRlusdContractAddress(chain, config);
-        const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
+        const pool = resolveAavePool(chain, config);
         const amount = parseUnits(opts.amount, config.rlusd.eth_decimals);
 
         const hash = await walletClient.writeContract({
@@ -264,7 +269,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         }
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
         const rlusd = getRlusdContractAddress(chain, config);
-        const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
+        const pool = resolveAavePool(chain, config);
         const amount = parseAmountOrMax(opts.amount, Boolean(opts.max), config.rlusd.eth_decimals);
 
         const approveHash = await walletClient.writeContract({
@@ -309,7 +314,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
           throw new Error(`No EVM wallet configured for ${chain}`);
         }
         const user = walletData.address as `0x${string}`;
-        const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
+        const pool = resolveAavePool(chain, config);
         const publicClient = getEvmPublicClient(chain);
 
         const [
@@ -386,6 +391,7 @@ function emitTxResult(
       logger.success(`${label} transaction confirmed`);
     } else {
       logger.error(`${label} transaction reverted`);
+      process.exitCode = 1;
     }
     logger.label("Tx Hash", hash);
   }

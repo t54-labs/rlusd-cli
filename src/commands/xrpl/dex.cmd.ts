@@ -21,6 +21,9 @@ function xrpDropsFromAmountTimesPrice(amount: string, price: string): string {
     throw new Error("amount and price must be positive numbers");
   }
   const drops = (scaledAmount * scaledPrice) / 1_000_000n;
+  if (drops <= 0n) {
+    throw new Error("Computed XRP amount is too small (rounds to 0 drops). Increase amount or price.");
+  }
   return drops.toString();
 }
 

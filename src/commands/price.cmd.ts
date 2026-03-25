@@ -7,10 +7,12 @@ import { logger } from "../utils/logger.js";
 import { CHAINLINK_AGGREGATOR_ABI } from "../abi/chainlink-aggregator.js";
 import { formatUnits } from "viem";
 import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import { fetchXrpUsdPrice } from "../services/price-feed.js";
 import { assertActiveRlusdEvmChain, getChainlinkOracleAddress } from "../utils/evm-support.js";
 
 type PriceSource = "chainlink" | "dex";
-const CHAINLINK_MAX_AGE_SECONDS = 60 * 60;
+const CHAINLINK_WARN_AGE_SECONDS = 60 * 60;
+const CHAINLINK_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 export function registerPriceCommand(program: Command): void {
   program
@@ -119,6 +121,9 @@ async function showChainlinkPrice(
     if (row.updated_at) {
       logger.label("Updated", row.updated_at);
     }
+    if (row.stale_warning) {
+      logger.warn(row.stale_warning);
+    }
   }
 }
 
@@ -135,6 +140,7 @@ async function readChainlinkPrice(
   updated_at: string | null;
   raw_answer: string | null;
   decimals: number | null;
+  stale_warning?: string;
 }> {
   const evmChain = resolveChainlinkEvmChain(program, opts, config);
   const publicClient = getEvmPublicClient(evmChain);
@@ -165,8 +171,13 @@ async function readChainlinkPrice(
       : null;
   if (ageSeconds !== null && ageSeconds > CHAINLINK_MAX_AGE_SECONDS) {
     throw new Error(
-      `Chainlink RLUSD/USD price is stale (${ageSeconds}s old). Refusing to return an outdated quote.`,
+      `Chainlink RLUSD/USD price is stale (${ageSeconds}s old, >24h). Refusing to return an outdated quote.`,
     );
+  }
+
+  let stale_warning: string | undefined;
+  if (ageSeconds !== null && ageSeconds > CHAINLINK_WARN_AGE_SECONDS) {
+    stale_warning = `Price was last updated ${Math.round(ageSeconds / 60)}min ago. Chainlink stablecoin feeds update on heartbeat (~24h) or deviation.`;
   }
 
   return {
@@ -178,6 +189,7 @@ async function readChainlinkPrice(
     updated_at: updatedAtIso,
     raw_answer: answer.toString(),
     decimals: Number.isFinite(decimals) ? decimals : null,
+    stale_warning,
   };
 }
 
@@ -190,9 +202,9 @@ function parseXrpAmount(amount: unknown): number | null {
   if (amount && typeof amount === "object") {
     const a = amount as { currency?: string; value?: string };
     if (a.currency === "XRP" && typeof a.value === "string") {
-      const drops = parseInt(a.value, 10);
-      if (Number.isNaN(drops)) return null;
-      return drops / 1_000_000;
+      const xrp = parseFloat(a.value);
+      if (Number.isNaN(xrp)) return null;
+      return xrp;
     }
   }
   return null;
@@ -296,17 +308,40 @@ async function showDexPrice(
 ): Promise<void> {
   void program;
 
-  const summary = await readDexBookSummary(config);
+  const [summary, xrpPrice] = await Promise.all([
+    readDexBookSummary(config),
+    fetchXrpUsdPrice(config.price_api),
+  ]);
+
+  const midXrpPerRlusd =
+    summary.best_bid_xrp_per_rlusd && summary.best_ask_xrp_per_rlusd
+      ? (parseFloat(summary.best_bid_xrp_per_rlusd) + parseFloat(summary.best_ask_xrp_per_rlusd)) / 2
+      : null;
+
+  const rlusdUsd =
+    midXrpPerRlusd != null && xrpPrice != null
+      ? (midXrpPerRlusd * xrpPrice.usd).toFixed(6)
+      : null;
+
   const data = {
     source: "dex" as const,
     pair: "XRP/RLUSD",
     ...summary,
+    ...(rlusdUsd != null && {
+      rlusd_usd_estimate: rlusdUsd,
+      xrp_usd: xrpPrice!.usd,
+      xrp_usd_source: xrpPrice!.source,
+    }),
   };
 
   if (outputFormat === "json" || outputFormat === "json-compact") {
     logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
   } else {
     logger.label("Source", "dex (XRPL book_offers)");
+    if (rlusdUsd != null) {
+      logger.label("RLUSD / USD (estimated)", `$${rlusdUsd}`);
+      logger.label("XRP / USD", `$${xrpPrice!.usd} (${xrpPrice!.source})`);
+    }
     logger.label("Best bid (XRP / RLUSD)", summary.best_bid_xrp_per_rlusd ?? "n/a");
     logger.label("Best ask (XRP / RLUSD)", summary.best_ask_xrp_per_rlusd ?? "n/a");
     logger.label("Bid-side offers", String(summary.bid_offer_count));

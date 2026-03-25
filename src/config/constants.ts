@@ -19,6 +19,24 @@ export const XRPL_DEVNET_FAUCET = "https://faucet.devnet.rippletest.net/accounts
 export const UNISWAP_V3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
 export const UNISWAP_V3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 
+export const DEFAULT_PRICE_API = {
+  provider: "coingecko",
+  base_url: "https://api.coingecko.com/api/v3",
+};
+
+export const DEFAULT_CONTRACTS: Record<string, { uniswap_router?: string; uniswap_quoter?: string; aave_v3_pool?: string }> = {
+  ethereum: {
+    uniswap_router: UNISWAP_V3_SWAP_ROUTER,
+    uniswap_quoter: UNISWAP_V3_QUOTER_V2,
+    aave_v3_pool: AAVE_V3_POOL_ETHEREUM,
+  },
+};
+
+export const DEFAULT_FAUCET = {
+  xrpl_testnet: XRPL_TESTNET_FAUCET,
+  xrpl_devnet: XRPL_DEVNET_FAUCET,
+};
+
 export const WELL_KNOWN_TOKENS: Record<string, { address: string; decimals: number; name: string }> = {
   WETH:  { address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18, name: "Wrapped Ether" },
   USDC:  { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6,  name: "USD Coin" },

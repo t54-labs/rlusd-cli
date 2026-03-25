@@ -21,12 +21,32 @@ export interface RlusdConfig {
   chainlink_oracle: string;
 }
 
+export interface PriceApiConfig {
+  provider: string;
+  base_url: string;
+  api_key?: string;
+}
+
+export interface ChainContracts {
+  uniswap_router?: string;
+  uniswap_quoter?: string;
+  aave_v3_pool?: string;
+}
+
+export interface FaucetConfig {
+  xrpl_testnet: string;
+  xrpl_devnet: string;
+}
+
 export interface AppConfig {
   environment: NetworkEnvironment;
   default_chain: ChainName;
   output_format: OutputFormat;
   chains: Record<string, ChainConfig>;
   rlusd: RlusdConfig;
+  price_api?: PriceApiConfig;
+  contracts?: Record<string, ChainContracts>;
+  faucet?: FaucetConfig;
 }
 
 export interface WalletInfo {

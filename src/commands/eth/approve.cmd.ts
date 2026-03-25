@@ -197,6 +197,7 @@ async function runApprove(
       logger.success(amountStr === "0" ? "Allowance revoked" : "Approval submitted");
     } else {
       logger.error(`Transaction reverted on ${chain}`);
+      process.exitCode = 1;
     }
     logger.label("Tx Hash", hash);
   }
