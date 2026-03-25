@@ -1,6 +1,5 @@
 import { Command } from "commander";
 import type { OfferCreate, OfferCancel } from "xrpl";
-import { xrpToDrops } from "xrpl";
 import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
@@ -8,24 +7,52 @@ import { loadConfig } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
+import { parseUnits } from "viem";
 
 function getOutputFormat(program: Command, configOutput: OutputFormat): OutputFormat {
   return (program.opts().output as OutputFormat) || configOutput;
 }
 
 function xrpDropsFromAmountTimesPrice(amount: string, price: string): string {
-  const a = Number(amount);
-  const p = Number(price);
-  if (!Number.isFinite(a) || !Number.isFinite(p) || a <= 0 || p <= 0) {
+  const scaledAmount = parseUnits(amount, 6);
+  const scaledPrice = parseUnits(price, 6);
+  if (scaledAmount <= 0n || scaledPrice <= 0n) {
     throw new Error("amount and price must be positive numbers");
   }
-  return xrpToDrops((a * p).toString());
+  const drops = (scaledAmount * scaledPrice) / 1_000_000n;
+  return drops.toString();
 }
 
 function readTxResult(meta: unknown): string {
   return typeof meta === "object" && meta !== null && "TransactionResult" in meta
     ? (meta as { TransactionResult: string }).TransactionResult
     : "unknown";
+}
+
+function offerPriceXrpPerRlusd(offer: {
+  TakerGets?: unknown;
+  TakerPays?: unknown;
+}): number | null {
+  const xrpAmount =
+    typeof offer.TakerGets === "string"
+      ? Number(offer.TakerGets) / 1_000_000
+      : typeof offer.TakerPays === "string"
+        ? Number(offer.TakerPays) / 1_000_000
+        : null;
+  const rlusdAmount =
+    typeof offer.TakerGets === "object" &&
+    offer.TakerGets !== null &&
+    "value" in offer.TakerGets
+      ? Number((offer.TakerGets as { value: string }).value)
+      : typeof offer.TakerPays === "object" &&
+          offer.TakerPays !== null &&
+          "value" in offer.TakerPays
+        ? Number((offer.TakerPays as { value: string }).value)
+        : null;
+
+  if (!xrpAmount || !rlusdAmount) return null;
+  return xrpAmount / rlusdAmount;
 }
 
 export function registerDexCommand(parent: Command, program: Command): void {
@@ -36,7 +63,10 @@ export function registerDexCommand(parent: Command, program: Command): void {
     .description("Buy RLUSD with XRP (limit order)")
     .requiredOption("--amount <n>", "RLUSD amount to receive")
     .requiredOption("--price <p>", "XRP price per 1 RLUSD (max XRP to pay per RLUSD)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -47,7 +77,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -75,6 +105,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`Offer failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`DEX buy failed: ${(err as Error).message}`);
@@ -89,7 +120,10 @@ export function registerDexCommand(parent: Command, program: Command): void {
     .description("Sell RLUSD for XRP (limit order)")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
     .requiredOption("--price <p>", "XRP to receive per 1 RLUSD")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -100,7 +134,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -128,6 +162,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`Offer failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`DEX sell failed: ${(err as Error).message}`);
@@ -141,7 +176,10 @@ export function registerDexCommand(parent: Command, program: Command): void {
     .command("cancel")
     .description("Cancel an open offer by sequence number")
     .requiredOption("--sequence <seq>", "OfferSequence from the OfferCreate transaction")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
@@ -158,7 +196,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -179,6 +217,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`OfferCancel failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`DEX cancel failed: ${(err as Error).message}`);
@@ -220,11 +259,23 @@ export function registerDexCommand(parent: Command, program: Command): void {
           ledger_index: "validated",
         });
 
-        const bids = bidsRes.result.offers;
-        const asks = asksRes.result.offers;
+        const bids = bidsRes.result.offers ?? [];
+        const asks = asksRes.result.offers ?? [];
 
-        const bestBid = bids[0];
-        const bestAsk = asks[0];
+        const bestBid = bids.reduce<(typeof bids)[number] | undefined>((best, offer) => {
+          const offerPrice = offerPriceXrpPerRlusd(offer);
+          const bestPrice = best ? offerPriceXrpPerRlusd(best) : null;
+          if (offerPrice === null) return best;
+          if (bestPrice === null || offerPrice > bestPrice) return offer;
+          return best;
+        }, undefined);
+        const bestAsk = asks.reduce<(typeof asks)[number] | undefined>((best, offer) => {
+          const offerPrice = offerPriceXrpPerRlusd(offer);
+          const bestPrice = best ? offerPriceXrpPerRlusd(best) : null;
+          if (offerPrice === null) return best;
+          if (bestPrice === null || offerPrice < bestPrice) return offer;
+          return best;
+        }, undefined);
 
         const summarizeOffer = (o: (typeof bids)[0]) => ({
           account: o.Account,

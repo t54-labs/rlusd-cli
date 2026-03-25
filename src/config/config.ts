@@ -5,7 +5,7 @@ import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import type { AppConfig, NetworkEnvironment, ChainName, OutputFormat } from "../types/index.js";
 import {
   RLUSD_XRPL_ISSUER,
-  RLUSD_XRPL_CURRENCY,
+  RLUSD_XRPL_CURRENCY_HEX,
   RLUSD_ETH_CONTRACT,
   RLUSD_ETH_DECIMALS,
   CHAINLINK_RLUSD_USD_ORACLE,
@@ -13,7 +13,11 @@ import {
   CONFIG_FILE,
   WALLETS_DIR,
 } from "./constants.js";
-import { getNetworkPreset } from "./networks.js";
+import { getNetworkPreset, isValidNetwork } from "./networks.js";
+
+const RUNTIME_NETWORK_ENV = "RLUSD_RUNTIME_NETWORK";
+const RUNTIME_OUTPUT_ENV = "RLUSD_RUNTIME_OUTPUT";
+const RUNTIME_CHAIN_ENV = "RLUSD_RUNTIME_CHAIN";
 
 export function getConfigDir(): string {
   return join(homedir(), CONFIG_DIR);
@@ -36,7 +40,7 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
     chains: preset.chains,
     rlusd: {
       xrpl_issuer: RLUSD_XRPL_ISSUER,
-      xrpl_currency: RLUSD_XRPL_CURRENCY,
+      xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
       eth_contract: RLUSD_ETH_CONTRACT,
       eth_decimals: RLUSD_ETH_DECIMALS,
       chainlink_oracle: CHAINLINK_RLUSD_USD_ORACLE,
@@ -47,12 +51,50 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
 export function ensureConfigDir(): void {
   const configDir = getConfigDir();
   if (!existsSync(configDir)) {
-    mkdirSync(configDir, { recursive: true });
+    mkdirSync(configDir, { recursive: true, mode: 0o700 });
   }
   const walletsDir = getWalletsDir();
   if (!existsSync(walletsDir)) {
-    mkdirSync(walletsDir, { recursive: true });
+    mkdirSync(walletsDir, { recursive: true, mode: 0o700 });
   }
+}
+
+function applyRuntimeOverrides(config: AppConfig): AppConfig {
+  const runtimeNetwork = process.env[RUNTIME_NETWORK_ENV];
+  const runtimeOutput = process.env[RUNTIME_OUTPUT_ENV];
+  const runtimeChain = process.env[RUNTIME_CHAIN_ENV];
+
+  if (runtimeNetwork && isValidNetwork(runtimeNetwork)) {
+    const preset = getNetworkPreset(runtimeNetwork);
+    config = {
+      ...config,
+      environment: runtimeNetwork,
+      chains: { ...config.chains, ...preset.chains },
+    };
+  }
+
+  if (
+    runtimeOutput &&
+    (runtimeOutput === "table" ||
+      runtimeOutput === "json" ||
+      runtimeOutput === "json-compact")
+  ) {
+    config = { ...config, output_format: runtimeOutput };
+  }
+
+  if (
+    runtimeChain &&
+    (runtimeChain === "xrpl" ||
+      runtimeChain === "ethereum" ||
+      runtimeChain === "base" ||
+      runtimeChain === "optimism" ||
+      runtimeChain === "ink" ||
+      runtimeChain === "unichain")
+  ) {
+    config = { ...config, default_chain: runtimeChain };
+  }
+
+  return config;
 }
 
 export function loadConfig(): AppConfig {
@@ -61,29 +103,31 @@ export function loadConfig(): AppConfig {
   if (!existsSync(configPath)) {
     const defaultConfig = createDefaultConfig();
     saveConfig(defaultConfig);
-    return defaultConfig;
+    return applyRuntimeOverrides(defaultConfig);
   }
 
   const raw = readFileSync(configPath, "utf-8");
   const parsed = yamlParse(raw) as Partial<AppConfig>;
 
-  const defaultConfig = createDefaultConfig(
-    (parsed.environment as NetworkEnvironment) || "testnet",
-  );
+  const environment = isValidNetwork(String(parsed.environment))
+    ? (parsed.environment as NetworkEnvironment)
+    : "testnet";
+  const defaultConfig = createDefaultConfig(environment);
 
-  return {
+  return applyRuntimeOverrides({
     ...defaultConfig,
     ...parsed,
+    environment,
     chains: { ...defaultConfig.chains, ...parsed.chains },
     rlusd: { ...defaultConfig.rlusd, ...parsed.rlusd },
-  };
+  });
 }
 
 export function saveConfig(config: AppConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
   const yamlContent = yamlStringify(config);
-  writeFileSync(configPath, yamlContent, "utf-8");
+  writeFileSync(configPath, yamlContent, { encoding: "utf-8", mode: 0o600 });
 }
 
 export function setNetwork(env: NetworkEnvironment): AppConfig {

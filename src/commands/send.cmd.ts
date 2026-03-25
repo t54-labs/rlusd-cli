@@ -9,6 +9,8 @@ import { loadConfig } from "../config/config.js";
 import { detectChainFromAddress, validateAddress } from "../utils/address.js";
 import { logger } from "../utils/logger.js";
 import { formatOutput } from "../utils/format.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../utils/secrets.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm-support.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
 import type { ChainName, OutputFormat, EvmChainName, StoredXrplWallet, StoredEvmWallet } from "../types/index.js";
 import { createWalletClient, http, parseUnits } from "viem";
@@ -21,13 +23,17 @@ function getViemChainForSend(chain: EvmChainName, env: string): Chain {
     switch (chain) {
       case "base": return base;
       case "optimism": return optimism;
-      default: return mainnet;
+      case "ethereum": return mainnet;
+      default:
+        throw new Error(`Unsupported EVM chain for send: ${chain}`);
     }
   }
   switch (chain) {
     case "base": return baseSepolia;
     case "optimism": return optimismSepolia;
-    default: return sepolia;
+    case "ethereum": return sepolia;
+    default:
+      throw new Error(`Unsupported EVM chain for send: ${chain}`);
   }
 }
 
@@ -40,7 +46,10 @@ export function registerSendCommand(program: Command): void {
     .option("-c, --chain <chain>", "chain to send on (auto-detected from address if omitted)")
     .option("--tag <tag>", "XRPL destination tag (integer)")
     .option("--memo <memo>", "transaction memo")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .option("--dry-run", "preview transaction without submitting")
     .action(async (opts) => {
       const config = loadConfig();
@@ -49,7 +58,20 @@ export function registerSendCommand(program: Command): void {
       let chain = (opts.chain || program.opts().chain) as ChainName | undefined;
       if (!chain) {
         const detected = detectChainFromAddress(opts.to);
-        chain = detected || config.default_chain;
+        if (detected === "xrpl") {
+          chain = "xrpl";
+        } else if (detected === "ethereum") {
+          if (config.default_chain !== "ethereum") {
+            logger.error(
+              "EVM recipient detected. Please specify --chain ethereum explicitly.",
+            );
+            process.exitCode = 1;
+            return;
+          }
+          chain = "ethereum";
+        } else {
+          chain = config.default_chain;
+        }
       }
 
       if (!validateAddress(opts.to, chain)) {
@@ -85,7 +107,7 @@ async function sendXrpl(
     return;
   }
 
-  const password = opts.password || "default-dev-password";
+  const password = resolveWalletPassword(opts.password);
   const wallet = restoreXrplWallet(walletData as StoredXrplWallet, password);
   const client = await getXrplClient();
 
@@ -101,10 +123,17 @@ async function sendXrpl(
   };
 
   if (opts.tag) {
-    paymentTx.DestinationTag = parseInt(opts.tag, 10);
+    const destinationTag = Number.parseInt(opts.tag, 10);
+    if (!Number.isInteger(destinationTag) || destinationTag < 0 || destinationTag > 0xffffffff) {
+      throw new Error("Destination tag must be an integer between 0 and 4294967295.");
+    }
+    paymentTx.DestinationTag = destinationTag;
   }
 
   if (opts.memo) {
+    if (Buffer.byteLength(opts.memo, "utf-8") > 256) {
+      throw new Error("Memo is too long. Maximum length is 256 bytes.");
+    }
     paymentTx.Memos = [
       {
         Memo: {
@@ -159,6 +188,7 @@ async function sendEvm(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
+  assertActiveRlusdEvmChain(chain);
   const walletData = getDefaultWallet(chain);
   if (!walletData || isXrplWallet(walletData)) {
     logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
@@ -166,7 +196,7 @@ async function sendEvm(
     return;
   }
 
-  const password = opts.password || "default-dev-password";
+  const password = resolveWalletPassword(opts.password);
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
 
   const rpcUrl = config.chains[chain]?.rpc;
@@ -184,7 +214,7 @@ async function sendEvm(
     transport: http(rpcUrl),
   });
 
-  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const contractAddress = getRlusdContractAddress(chain, config);
   const toAddress = opts.to as `0x${string}`;
   const amount = parseUnits(opts.amount, config.rlusd.eth_decimals);
 

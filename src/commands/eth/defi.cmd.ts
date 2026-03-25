@@ -13,6 +13,8 @@ import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment } from "../../types/index.js";
 import { AAVE_V3_POOL_ETHEREUM } from "../../config/constants.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 
 const AAVE_VARIABLE_RATE_MODE = 2n;
 const BASE_CURRENCY_DECIMALS = 8;
@@ -25,8 +27,10 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
         return base;
       case "optimism":
         return optimism;
-      default:
+      case "ethereum":
         return mainnet;
+      default:
+        throw new Error(`Unsupported EVM chain: ${chain}`);
     }
   }
   switch (chain) {
@@ -34,8 +38,10 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
       return baseSepolia;
     case "optimism":
       return optimismSepolia;
-    default:
+    case "ethereum":
       return sepolia;
+    default:
+      throw new Error(`Unsupported EVM chain: ${chain}`);
   }
 }
 
@@ -55,7 +61,9 @@ function resolveChain(opts: { chain?: string }, program: Command): EvmChainName 
   if (raw === "xrpl") {
     throw new Error("Aave commands require an EVM chain (use --chain ethereum)");
   }
-  return raw as EvmChainName;
+  const chain = raw as EvmChainName;
+  assertActiveRlusdEvmChain(chain);
+  return chain;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,7 +88,7 @@ async function getWalletWriteContext(
     throw new Error(`RPC not configured for ${chain}`);
   }
 
-  const pwd = password ?? "default-dev-password";
+  const pwd = resolveWalletPassword(password);
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
   const viemChain = getViemChain(chain, config.environment);
   const account = privateKeyToAccount(privateKey as `0x${string}`);
@@ -116,7 +124,10 @@ export function registerDefiCommand(parent: Command, program: Command): void {
     .description("Supply RLUSD to Aave (approve Pool, then supply)")
     .requiredOption("--amount <n>", "amount of RLUSD to supply")
     .option("-c, --chain <chain>", "EVM chain (must be ethereum for Aave pool)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { amount: string; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -124,7 +135,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         const chain = resolveChain(opts, program);
         assertEthereumAave(chain, config);
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
-        const rlusd = config.rlusd.eth_contract as `0x${string}`;
+        const rlusd = getRlusdContractAddress(chain, config);
         const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
         const dec = config.rlusd.eth_decimals;
         const amount = parseUnits(opts.amount, dec);
@@ -160,7 +171,10 @@ export function registerDefiCommand(parent: Command, program: Command): void {
     .option("--amount <n>", "amount of RLUSD to withdraw")
     .option("--max", "withdraw full RLUSD position (maxUint256)")
     .option("-c, --chain <chain>", "EVM chain (must be ethereum for Aave pool)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { amount?: string; max?: boolean; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -171,7 +185,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
           throw new Error("Provide --amount <n> or --max");
         }
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
-        const rlusd = config.rlusd.eth_contract as `0x${string}`;
+        const rlusd = getRlusdContractAddress(chain, config);
         const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
         const amount = parseAmountOrMax(opts.amount, Boolean(opts.max), config.rlusd.eth_decimals);
 
@@ -197,7 +211,10 @@ export function registerDefiCommand(parent: Command, program: Command): void {
     .description("Borrow RLUSD from Aave (variable rate)")
     .requiredOption("--amount <n>", "amount of RLUSD to borrow")
     .option("-c, --chain <chain>", "EVM chain (must be ethereum for Aave pool)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { amount: string; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -205,7 +222,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
         const chain = resolveChain(opts, program);
         assertEthereumAave(chain, config);
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
-        const rlusd = config.rlusd.eth_contract as `0x${string}`;
+        const rlusd = getRlusdContractAddress(chain, config);
         const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
         const amount = parseUnits(opts.amount, config.rlusd.eth_decimals);
 
@@ -232,7 +249,10 @@ export function registerDefiCommand(parent: Command, program: Command): void {
     .option("--amount <n>", "amount of RLUSD to repay")
     .option("--max", "repay full debt (maxUint256)")
     .option("-c, --chain <chain>", "EVM chain (must be ethereum for Aave pool)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { amount?: string; max?: boolean; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -243,7 +263,7 @@ export function registerDefiCommand(parent: Command, program: Command): void {
           throw new Error("Provide --amount <n> or --max");
         }
         const { walletClient, account, publicClient } = await getWalletWriteContext(chain, opts.password, config);
-        const rlusd = config.rlusd.eth_contract as `0x${string}`;
+        const rlusd = getRlusdContractAddress(chain, config);
         const pool = AAVE_V3_POOL_ETHEREUM as `0x${string}`;
         const amount = parseAmountOrMax(opts.amount, Boolean(opts.max), config.rlusd.eth_decimals);
 

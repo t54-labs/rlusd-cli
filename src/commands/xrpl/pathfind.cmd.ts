@@ -6,6 +6,7 @@ import { loadConfig } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 
 function getOutputFormat(program: Command, configOutput: OutputFormat): OutputFormat {
   return (program.opts().output as OutputFormat) || configOutput;
@@ -17,7 +18,10 @@ export function registerPathfindCommand(parent: Command, program: Command): void
     .description("Find payment paths to deliver RLUSD to a destination")
     .requiredOption("--to <address>", "Destination XRPL classic address")
     .requiredOption("--amount <n>", "RLUSD value to deliver")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -30,7 +34,7 @@ export function registerPathfindCommand(parent: Command, program: Command): void
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -48,7 +52,10 @@ export function registerPathfindCommand(parent: Command, program: Command): void
         });
 
         const alternatives = res.result.alternatives ?? [];
-        const rows: Array<Record<string, unknown>> = alternatives.map((alt, index) => ({
+        const rows: Array<Record<string, unknown>> = alternatives.map((
+          alt: { source_amount?: unknown; paths_computed?: unknown[] },
+          index: number,
+        ) => ({
           index,
           source_amount: alt.source_amount,
           path_steps: alt.paths_computed?.length ?? 0,

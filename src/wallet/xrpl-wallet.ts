@@ -1,4 +1,5 @@
-import { Wallet, ECDSA } from "xrpl";
+import xrpl from "xrpl";
+const { Wallet, ECDSA } = xrpl;
 import { encrypt, decrypt } from "./crypto.js";
 import type { StoredXrplWallet } from "../types/index.js";
 
@@ -11,7 +12,7 @@ export interface XrplWalletResult {
   algorithm: XrplAlgorithm;
 }
 
-function toECDSA(algorithm: XrplAlgorithm): ECDSA {
+function toECDSA(algorithm: XrplAlgorithm) {
   return algorithm === "secp256k1" ? ECDSA.secp256k1 : ECDSA.ed25519;
 }
 
@@ -54,7 +55,10 @@ export function decryptXrplSecret(stored: StoredXrplWallet, password: string): s
   return decrypt(stored.encrypted_secret, password);
 }
 
-export function restoreXrplWallet(stored: StoredXrplWallet, password: string): Wallet {
+export function restoreXrplWallet(
+  stored: StoredXrplWallet,
+  password: string,
+): ReturnType<typeof Wallet.fromSeed> {
   const secret = decryptXrplSecret(stored, password);
   return Wallet.fromSeed(secret);
 }

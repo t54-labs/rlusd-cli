@@ -12,6 +12,8 @@ import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, NetworkEnvironment, OutputFormat, StoredEvmWallet } from "../../types/index.js";
 import { validateAddress } from "../../utils/address.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 
 function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
   if (env === "mainnet") {
@@ -20,8 +22,10 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
         return base;
       case "optimism":
         return optimism;
-      default:
+      case "ethereum":
         return mainnet;
+      default:
+        throw new Error(`Unsupported EVM chain: ${chain}`);
     }
   }
   switch (chain) {
@@ -29,17 +33,21 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
       return baseSepolia;
     case "optimism":
       return optimismSepolia;
-    default:
+    case "ethereum":
       return sepolia;
+    default:
+      throw new Error(`Unsupported EVM chain: ${chain}`);
   }
 }
 
 function resolveEvmChain(opts: { chain?: string }, program: Command, defaultChain: EvmChainName): EvmChainName {
   const raw = (opts.chain || program.opts().chain || defaultChain) as string;
   if (raw === "xrpl") {
-    throw new Error("ERC-20 approve requires an EVM chain (ethereum, base, optimism)");
+    throw new Error("ERC-20 approve requires an EVM chain.");
   }
-  return raw as EvmChainName;
+  const chain = raw as EvmChainName;
+  assertActiveRlusdEvmChain(chain);
+  return chain;
 }
 
 export function registerApproveCommand(parent: Command, program: Command): void {
@@ -48,8 +56,11 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .description("Approve RLUSD spending for a spender")
     .requiredOption("--spender <address>", "spender contract or wallet address")
     .requiredOption("--amount <n>", "allowance amount in RLUSD (token units)")
-    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
-    .option("--password <password>", "wallet password")
+    .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { spender: string; amount: string; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -71,8 +82,11 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .command("allowance")
     .description("Check RLUSD allowance for a spender")
     .requiredOption("--spender <address>", "spender address")
-    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
-    .option("--password <password>", "wallet password (uses default wallet address as owner)")
+    .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()}; only used to resolve the active wallet)`,
+    )
     .action(async (opts: { spender: string; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -94,8 +108,11 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .command("revoke")
     .description("Revoke RLUSD approval (set allowance to 0)")
     .requiredOption("--spender <address>", "spender address to revoke")
-    .option("-c, --chain <chain>", "EVM chain: ethereum | base | optimism")
-    .option("--password <password>", "wallet password")
+    .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts: { spender: string; chain?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
@@ -129,7 +146,7 @@ async function runApprove(
     return;
   }
 
-  const pwd = password ?? "default-dev-password";
+  const pwd = resolveWalletPassword(password);
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
 
   const rpcUrl = config.chains[chain]?.rpc;
@@ -147,7 +164,7 @@ async function runApprove(
     transport: http(rpcUrl),
   });
 
-  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const contractAddress = getRlusdContractAddress(chain, config);
   const spenderAddr = spender as `0x${string}`;
   const decimals = config.rlusd.eth_decimals;
   const value = parseUnits(amountStr, decimals);
@@ -201,7 +218,7 @@ async function runAllowance(
   const owner = walletData.address as `0x${string}`;
 
   const publicClient = getEvmPublicClient(chain);
-  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const contractAddress = getRlusdContractAddress(chain, config);
   const spenderAddr = spender as `0x${string}`;
 
   const raw = await publicClient.readContract({

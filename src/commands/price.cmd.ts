@@ -7,19 +7,24 @@ import { logger } from "../utils/logger.js";
 import { CHAINLINK_AGGREGATOR_ABI } from "../abi/chainlink-aggregator.js";
 import { formatUnits } from "viem";
 import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import { assertActiveRlusdEvmChain, getChainlinkOracleAddress } from "../utils/evm-support.js";
 
 type PriceSource = "chainlink" | "dex";
+const CHAINLINK_MAX_AGE_SECONDS = 60 * 60;
 
 export function registerPriceCommand(program: Command): void {
   program
     .command("price")
     .description("Show RLUSD reference price (Chainlink oracle or XRPL DEX)")
     .option("-c, --chain <chain>", "EVM chain for Chainlink reads (defaults when not xrpl)")
-    .option("--source <source>", "chainlink | dex", "chainlink")
+    .option("--source <source>", "chainlink | dex (auto-detected from default chain)")
     .action(async (opts: { chain?: string; source?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
-      const source = (opts.source || "chainlink") as PriceSource;
+      const effectiveChain = (opts.chain || program.opts().chain || config.default_chain) as ChainName;
+      const source: PriceSource = opts.source
+        ? (opts.source as PriceSource)
+        : effectiveChain === "xrpl" ? "dex" : "chainlink";
 
       try {
         if (source === "dex") {
@@ -84,7 +89,9 @@ function resolveChainlinkEvmChain(program: Command, opts: { chain?: string }, co
   if (fromOpts === "xrpl") {
     return "ethereum";
   }
-  return fromOpts as EvmChainName;
+  const chain = fromOpts as EvmChainName;
+  assertActiveRlusdEvmChain(chain);
+  return chain;
 }
 
 async function showChainlinkPrice(
@@ -131,7 +138,7 @@ async function readChainlinkPrice(
 }> {
   const evmChain = resolveChainlinkEvmChain(program, opts, config);
   const publicClient = getEvmPublicClient(evmChain);
-  const oracle = config.rlusd.chainlink_oracle as `0x${string}`;
+  const oracle = getChainlinkOracleAddress(evmChain, config);
 
   const [roundData, dec] = await Promise.all([
     publicClient.readContract({
@@ -150,6 +157,17 @@ async function readChainlinkPrice(
   const decimals = Number(dec);
   const price =
     Number.isFinite(decimals) && decimals >= 0 ? formatUnits(answer, decimals) : null;
+  const updatedAtIso =
+    typeof updatedAt === "bigint" ? new Date(Number(updatedAt) * 1000).toISOString() : null;
+  const ageSeconds =
+    typeof updatedAt === "bigint"
+      ? Math.floor(Date.now() / 1000) - Number(updatedAt)
+      : null;
+  if (ageSeconds !== null && ageSeconds > CHAINLINK_MAX_AGE_SECONDS) {
+    throw new Error(
+      `Chainlink RLUSD/USD price is stale (${ageSeconds}s old). Refusing to return an outdated quote.`,
+    );
+  }
 
   return {
     source: "chainlink",
@@ -157,7 +175,7 @@ async function readChainlinkPrice(
     oracle,
     price_usd: price,
     round_id: roundData[0]?.toString() ?? null,
-    updated_at: typeof updatedAt === "bigint" ? new Date(Number(updatedAt) * 1000).toISOString() : null,
+    updated_at: updatedAtIso,
     raw_answer: answer.toString(),
     decimals: Number.isFinite(decimals) ? decimals : null,
   };

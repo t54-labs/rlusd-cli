@@ -8,9 +8,11 @@ import { logger } from "../utils/logger.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
 import { formatUnits, getAbiItem } from "viem";
 import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm-support.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const EVM_LOG_LOOKBACK_BLOCKS = 100_000n;
+const EVM_LOG_BATCH_SIZE = 20_000n;
 
 export function registerTxCommand(program: Command): void {
   const txCmd = program.command("tx").description("Query RLUSD-related transactions");
@@ -109,6 +111,7 @@ async function txStatusXrpl(hash: string, outputFormat: OutputFormat): Promise<v
 }
 
 async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: OutputFormat): Promise<void> {
+  assertActiveRlusdEvmChain(chain);
   const publicClient = getEvmPublicClient(chain);
   const txHash = hash as `0x${string}`;
   const receipt = await publicClient.getTransactionReceipt({ hash: txHash }).catch(() => null);
@@ -118,7 +121,7 @@ async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: Outp
     const data = {
       chain,
       hash,
-      status: "pending" as const,
+      status: tx ? ("pending" as const) : ("unknown" as const),
       block_number: null as string | null,
       gas_used: null as string | null,
       from: tx?.from ?? null,
@@ -129,7 +132,7 @@ async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: Outp
     } else {
       logger.label("Chain", chain);
       logger.label("Hash", hash);
-      logger.label("Status", "pending (no receipt yet)");
+      logger.label("Status", tx ? "pending (no receipt yet)" : "unknown transaction hash");
     }
     return;
   }
@@ -242,6 +245,7 @@ async function txHistoryEvm(
   outputFormat: OutputFormat,
   limit: number,
 ): Promise<void> {
+  assertActiveRlusdEvmChain(chain);
   const wallet = getDefaultWallet(chain);
   if (!wallet) {
     logger.error(`No ${chain} wallet configured. Run: rlusd wallet generate --chain ${chain}`);
@@ -250,27 +254,37 @@ async function txHistoryEvm(
   }
 
   const publicClient = getEvmPublicClient(chain);
-  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const contractAddress = getRlusdContractAddress(chain, config);
   const account = wallet.address as `0x${string}`;
   const latest = await publicClient.getBlockNumber();
   const fromBlock = latest > EVM_LOG_LOOKBACK_BLOCKS ? latest - EVM_LOG_LOOKBACK_BLOCKS : 0n;
+  const logsOut: Awaited<ReturnType<typeof publicClient.getLogs>> = [];
+  const logsIn: Awaited<ReturnType<typeof publicClient.getLogs>> = [];
 
-  const [logsOut, logsIn] = await Promise.all([
-    publicClient.getLogs({
-      address: contractAddress,
-      event: transferEvent,
-      args: { from: account },
-      fromBlock,
-      toBlock: "latest",
-    }),
-    publicClient.getLogs({
-      address: contractAddress,
-      event: transferEvent,
-      args: { to: account },
-      fromBlock,
-      toBlock: "latest",
-    }),
-  ]);
+  for (let start = fromBlock; start <= latest; start += EVM_LOG_BATCH_SIZE) {
+    const end =
+      start + EVM_LOG_BATCH_SIZE - 1n > latest
+        ? latest
+        : start + EVM_LOG_BATCH_SIZE - 1n;
+    const [outBatch, inBatch] = await Promise.all([
+      publicClient.getLogs({
+        address: contractAddress,
+        event: transferEvent,
+        args: { from: account },
+        fromBlock: start,
+        toBlock: end,
+      }),
+      publicClient.getLogs({
+        address: contractAddress,
+        event: transferEvent,
+        args: { to: account },
+        fromBlock: start,
+        toBlock: end,
+      }),
+    ]);
+    logsOut.push(...outBatch);
+    logsIn.push(...inBatch);
+  }
 
   type LogRow = {
     blockNumber: bigint;
@@ -284,15 +298,24 @@ async function txHistoryEvm(
   const byKey = new Map<string, LogRow>();
 
   const pushLog = (log: (typeof logsOut)[number]): void => {
-    const { blockNumber, logIndex, transactionHash, args } = log;
+    const rawLog = log as {
+      blockNumber?: bigint | null;
+      logIndex?: number | null;
+      transactionHash?: `0x${string}` | null;
+      args?: { from?: string; to?: string; value?: bigint };
+    };
+    const { blockNumber, logIndex, transactionHash, args } = rawLog;
     if (
       !args ||
       args.from === undefined ||
       args.to === undefined ||
       args.value === undefined ||
       blockNumber === undefined ||
+      blockNumber === null ||
       logIndex === undefined ||
+      logIndex === null ||
       transactionHash === undefined
+      || transactionHash === null
     ) {
       return;
     }

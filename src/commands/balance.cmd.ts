@@ -2,12 +2,14 @@ import { Command } from "commander";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
 import { getXrplBalance, disconnectXrplClient } from "../clients/xrpl-client.js";
-import { getEvmRlusdBalance } from "../clients/evm-client.js";
+import { getEvmNativeBalance, getEvmRlusdBalance } from "../clients/evm-client.js";
 import { formatOutput, formatRlusdAmount } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import type { ChainName, OutputFormat, EvmChainName, BalanceResult } from "../types/index.js";
+import { getActiveRlusdEvmChains } from "../utils/evm-support.js";
 
-const EVM_CHAINS: EvmChainName[] = ["ethereum", "base", "optimism"];
+const RLUSD_EVM_CHAINS: EvmChainName[] = getActiveRlusdEvmChains();
+const NATIVE_EVM_CHAINS: EvmChainName[] = ["ethereum", "base", "optimism"];
 
 export function registerBalanceCommand(program: Command): void {
   program
@@ -52,11 +54,14 @@ export function registerBalanceCommand(program: Command): void {
           results.push({ chain: "xrpl", address: xrplWallet.address, balance: xrp, symbol: "XRP" });
         }
 
-        for (const evmChain of EVM_CHAINS) {
+        for (const evmChain of NATIVE_EVM_CHAINS) {
           const evmWallet = getDefaultWallet(evmChain);
           if (evmWallet) {
             try {
-              const { native, nativeSymbol } = await getEvmRlusdBalance(evmChain, evmWallet.address);
+              const { native, nativeSymbol } = await getEvmNativeBalance(
+                evmChain,
+                evmWallet.address,
+              );
               results.push({ chain: evmChain, address: evmWallet.address, balance: native, symbol: nativeSymbol });
             } catch {
               results.push({ chain: evmChain, address: evmWallet.address, balance: "error", symbol: "ETH" });
@@ -151,7 +156,7 @@ async function queryAllChains(outputFormat: OutputFormat, addressOverride?: stri
     }
   }
 
-  for (const evmChain of EVM_CHAINS) {
+  for (const evmChain of RLUSD_EVM_CHAINS) {
     const evmAddress = addressOverride || getDefaultWallet(evmChain)?.address;
     if (evmAddress) {
       try {

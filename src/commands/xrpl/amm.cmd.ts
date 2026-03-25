@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type { AMMDeposit, AMMWithdraw, AMMVote } from "xrpl";
-import { AMMDepositFlags, AMMWithdrawFlags, xrpToDrops } from "xrpl";
+import xrplPkg from "xrpl";
+const { AMMDepositFlags, AMMWithdrawFlags, xrpToDrops } = xrplPkg;
 import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
@@ -8,6 +9,7 @@ import { loadConfig } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 
 function getOutputFormat(program: Command, configOutput: OutputFormat): OutputFormat {
   return (program.opts().output as OutputFormat) || configOutput;
@@ -85,7 +87,10 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .description("Deposit XRP and RLUSD liquidity (two-asset)")
     .requiredOption("--xrp <n>", "XRP amount to deposit")
     .requiredOption("--rlusd <n>", "RLUSD amount to deposit")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -96,7 +101,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -126,6 +131,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`AMMDeposit failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`AMM deposit failed: ${(err as Error).message}`);
@@ -139,7 +145,10 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .command("withdraw")
     .description("Withdraw liquidity by redeeming LP tokens")
     .requiredOption("--lp-tokens <n>", "LP token amount to redeem")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -150,7 +159,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -187,6 +196,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`AMMWithdraw failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`AMM withdraw failed: ${(err as Error).message}`);
@@ -200,7 +210,10 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .command("vote")
     .description("Vote on AMM trading fee (fee in 1/100000 units, max 1000 = 1%)")
     .requiredOption("--fee <n>", "Proposed trading fee (1/100000 units)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -212,13 +225,13 @@ export function registerAmmCommand(parent: Command, program: Command): void {
         }
 
         const fee = Number.parseInt(String(opts.fee), 10);
-        if (!Number.isFinite(fee) || fee < 0) {
-          logger.error("Invalid --fee");
+        if (!Number.isFinite(fee) || fee < 0 || fee > 1000) {
+          logger.error("Invalid --fee. Use an integer between 0 and 1000.");
           process.exitCode = 1;
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -242,6 +255,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`AMMVote failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`AMM vote failed: ${(err as Error).message}`);
@@ -255,7 +269,10 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .command("swap")
     .description("Swap XRP for RLUSD via AMM (single-asset deposit)")
     .requiredOption("--sell-xrp <n>", "XRP amount to contribute toward the swap")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -266,7 +283,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
         const { assetXrp, assetRlusd } = poolAssets(config);
@@ -291,6 +308,7 @@ export function registerAmmCommand(parent: Command, program: Command): void {
         } else {
           logger.error(`AMMDeposit swap failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`AMM swap failed: ${(err as Error).message}`);

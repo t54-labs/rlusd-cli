@@ -5,6 +5,7 @@ import { saveWallet, listWallets, getDefaultWallet, setDefaultWallet } from "../
 import { loadConfig } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../utils/secrets.js";
 import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
 
 export function registerWalletCommand(program: Command): void {
@@ -16,11 +17,21 @@ export function registerWalletCommand(program: Command): void {
     .option("-c, --chain <chain>", "target chain: xrpl | ethereum")
     .option("--algorithm <algo>", "key algorithm for XRPL: ed25519 | secp256k1", "ed25519")
     .option("--name <name>", "wallet name")
-    .option("--password <password>", "encryption password (will prompt if not provided)")
+    .option(
+      "--password <password>",
+      `encryption password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action((opts) => {
       const chain = (opts.chain || program.opts().chain || "xrpl") as ChainName;
-      const password = opts.password || "default-dev-password";
       const outputFormat = (program.opts().output as OutputFormat) || loadConfig().output_format;
+      let password: string;
+      try {
+        password = resolveWalletPassword(opts.password);
+      } catch (err) {
+        logger.error((err as Error).message);
+        process.exitCode = 1;
+        return;
+      }
 
       if (chain === "xrpl") {
         const algo = opts.algorithm === "secp256k1" ? "secp256k1" : "ed25519";
@@ -66,10 +77,20 @@ export function registerWalletCommand(program: Command): void {
     .option("--private-key <key>", "EVM private key")
     .option("--mnemonic <phrase>", "BIP-39 mnemonic phrase")
     .option("--name <name>", "wallet name")
-    .option("--password <password>", "encryption password")
+    .option(
+      "--password <password>",
+      `encryption password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action((opts) => {
       const chain = (opts.chain || program.opts().chain || "xrpl") as ChainName;
-      const password = opts.password || "default-dev-password";
+      let password: string;
+      try {
+        password = resolveWalletPassword(opts.password);
+      } catch (err) {
+        logger.error((err as Error).message);
+        process.exitCode = 1;
+        return;
+      }
 
       if (chain === "xrpl") {
         if (!opts.secret) {
@@ -175,7 +196,12 @@ export function registerWalletCommand(program: Command): void {
     .option("-c, --chain <chain>", "chain to set default for")
     .action((name, opts) => {
       const chain = (opts.chain || program.opts().chain || loadConfig().default_chain) as ChainName;
-      setDefaultWallet(chain, name);
-      logger.success(`Default wallet for ${chain} set to ${name}`);
+      try {
+        setDefaultWallet(chain, name);
+        logger.success(`Default wallet for ${chain} set to ${name}`);
+      } catch (err) {
+        logger.error((err as Error).message);
+        process.exitCode = 1;
+      }
     });
 }

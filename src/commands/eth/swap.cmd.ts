@@ -17,6 +17,8 @@ import {
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment } from "../../types/index.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 const DEFAULT_FEE_TIER = 3000; // 0.3% Uniswap pool fee
@@ -26,13 +28,17 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
     switch (chain) {
       case "base": return base;
       case "optimism": return optimism;
-      default: return mainnet;
+      case "ethereum": return mainnet;
+      default:
+        throw new Error(`Unsupported EVM chain: ${chain}`);
     }
   }
   switch (chain) {
     case "base": return baseSepolia;
     case "optimism": return optimismSepolia;
-    default: return sepolia;
+    case "ethereum": return sepolia;
+    default:
+      throw new Error(`Unsupported EVM chain: ${chain}`);
   }
 }
 
@@ -40,10 +46,6 @@ function resolveTokenAddress(symbol: string): { address: string; decimals: numbe
   const upper = symbol.toUpperCase();
   const token = WELL_KNOWN_TOKENS[upper];
   if (token) return { address: token.address, decimals: token.decimals };
-
-  if (symbol.startsWith("0x") && symbol.length === 42) {
-    return { address: symbol, decimals: 18 };
-  }
   return null;
 }
 
@@ -54,32 +56,30 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .command("sell")
     .description("Sell RLUSD for another token via Uniswap V3 exactInputSingle")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
-    .requiredOption("--for <token>", "token to receive: USDC | USDT | WETH | DAI | WBTC | 0x...")
+    .requiredOption("--for <token>", "token to receive: USDC | USDT | WETH | DAI | WBTC")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .option("--dry-run", "simulate without submitting")
     .action(async (opts) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       const chain = (opts.chain || program.opts().chain || "ethereum") as EvmChainName;
 
-      if (chain === "xrpl" as string) {
-        logger.error("Uniswap swap is only available on EVM chains. For XRPL, use: rlusd xrpl dex sell");
-        process.exitCode = 1;
-        return;
-      }
-
       const outToken = resolveTokenAddress(opts.for);
       if (!outToken) {
-        logger.error(`Unknown token: ${opts.for}. Use a symbol (USDC, WETH, ...) or a 0x contract address.`);
+        logger.error(`Unknown token: ${opts.for}. Supported tokens: ${Object.keys(WELL_KNOWN_TOKENS).join(", ")}`);
         logger.dim(`Known tokens: ${Object.keys(WELL_KNOWN_TOKENS).join(", ")}`);
         process.exitCode = 1;
         return;
       }
 
       try {
+        assertActiveRlusdEvmChain(chain);
         await executeSwapSell(chain, opts, outToken, config, outputFormat);
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
@@ -91,31 +91,29 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .command("buy")
     .description("Buy RLUSD with another token via Uniswap V3")
     .requiredOption("--amount <n>", "RLUSD amount to buy")
-    .requiredOption("--with <token>", "token to pay with: USDC | USDT | WETH | DAI | WBTC | 0x...")
+    .requiredOption("--with <token>", "token to pay with: USDC | USDT | WETH | DAI | WBTC")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .option("--dry-run", "simulate without submitting")
     .action(async (opts) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       const chain = (opts.chain || program.opts().chain || "ethereum") as EvmChainName;
 
-      if (chain === "xrpl" as string) {
-        logger.error("Uniswap swap is only available on EVM chains. For XRPL, use: rlusd xrpl dex buy");
-        process.exitCode = 1;
-        return;
-      }
-
       const inToken = resolveTokenAddress(opts.with);
       if (!inToken) {
-        logger.error(`Unknown token: ${opts.with}. Use a symbol (USDC, WETH, ...) or a 0x contract address.`);
+        logger.error(`Unknown token: ${opts.with}. Supported tokens: ${Object.keys(WELL_KNOWN_TOKENS).join(", ")}`);
         process.exitCode = 1;
         return;
       }
 
       try {
+        assertActiveRlusdEvmChain(chain);
         await executeSwapBuy(chain, opts, inToken, config, outputFormat);
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
@@ -143,10 +141,11 @@ export function registerSwapCommand(parent: Command, program: Command): void {
       }
 
       try {
+        assertActiveRlusdEvmChain(chain);
         const publicClient = getEvmPublicClient(chain);
-        const rlusdAddress = config.rlusd.eth_contract as `0x${string}`;
+        const rlusdAddress = getRlusdContractAddress(chain, config);
         const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
-        const fee = parseInt(opts.feeTier || String(DEFAULT_FEE_TIER), 10);
+        const fee = parseFeeTier(opts.feeTier);
 
         const result = await publicClient.simulateContract({
           address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
@@ -207,6 +206,22 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyWalletClient = any;
 
+function parseFeeTier(feeTier: string | undefined): number {
+  const fee = Number.parseInt(feeTier || String(DEFAULT_FEE_TIER), 10);
+  if (![100, 500, 3000, 10000].includes(fee)) {
+    throw new Error("Invalid --fee-tier. Supported values: 100, 500, 3000, 10000.");
+  }
+  return fee;
+}
+
+function parseSlippageBps(raw: string | undefined): number {
+  const value = Number.parseInt(raw || String(DEFAULT_SLIPPAGE_BPS), 10);
+  if (!Number.isInteger(value) || value < 0 || value > 5000) {
+    throw new Error("Invalid --slippage. Use basis points between 0 and 5000.");
+  }
+  return value;
+}
+
 async function getWalletContext(
   chain: EvmChainName,
   password: string | undefined,
@@ -216,7 +231,7 @@ async function getWalletContext(
   if (!walletData || isXrplWallet(walletData)) {
     throw new Error(`No EVM wallet for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
   }
-  const pwd = password ?? "default-dev-password";
+  const pwd = resolveWalletPassword(password);
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
   const viemChain = getViemChain(chain, config.environment);
   const rpcUrl = config.chains[chain]?.rpc;
@@ -235,13 +250,30 @@ async function executeSwapSell(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  const rlusdAddress = config.rlusd.eth_contract as `0x${string}`;
+  const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = UNISWAP_V3_SWAP_ROUTER as `0x${string}`;
   const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
-  const slippageBps = parseInt(opts.slippage || String(DEFAULT_SLIPPAGE_BPS), 10);
-  const fee = parseInt(opts.feeTier || String(DEFAULT_FEE_TIER), 10);
+  const slippageBps = parseSlippageBps(opts.slippage);
+  const fee = parseFeeTier(opts.feeTier);
 
   const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
+  const quoteResult = await publicClient.simulateContract({
+    address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
+    abi: UNISWAP_QUOTER_V2_ABI,
+    functionName: "quoteExactInputSingle",
+    args: [
+      {
+        tokenIn: rlusdAddress,
+        tokenOut: outToken.address as `0x${string}`,
+        amountIn,
+        fee,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
+  });
+  const [quotedAmountOut] = quoteResult.result;
+  const amountOutMin =
+    quotedAmountOut - (quotedAmountOut * BigInt(slippageBps)) / 10_000n;
 
   if (opts.dryRun) {
     logger.info("Dry run — no transaction will be submitted");
@@ -250,6 +282,14 @@ async function executeSwapSell(
     logger.label("Token Out", outToken.address);
     logger.label("Fee Tier", `${fee / 10000}%`);
     logger.label("Slippage", `${slippageBps / 100}%`);
+    logger.label(
+      "Quoted Amount Out",
+      `${formatUnits(quotedAmountOut, outToken.decimals)} token units`,
+    );
+    logger.label(
+      "Minimum Amount Out",
+      `${formatUnits(amountOutMin, outToken.decimals)} token units`,
+    );
     logger.label("Router", routerAddress);
     return;
   }
@@ -266,7 +306,6 @@ async function executeSwapSell(
 
   // Step 2: Execute swap
   logger.info("Executing swap on Uniswap V3...");
-  const amountOutMin = 0n; // Real apps should use quote to set slippage-protected minimum
   const swapHash = await walletClient.writeContract({
     address: routerAddress,
     abi: UNISWAP_V3_ROUTER_ABI,
@@ -316,16 +355,32 @@ async function executeSwapBuy(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  const rlusdAddress = config.rlusd.eth_contract as `0x${string}`;
+  const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = UNISWAP_V3_SWAP_ROUTER as `0x${string}`;
-  const fee = parseInt(opts.feeTier || String(DEFAULT_FEE_TIER), 10);
+  const fee = parseFeeTier(opts.feeTier);
+  const slippageBps = parseSlippageBps(opts.slippage);
 
   const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
 
   // For buying RLUSD we use exactOutputSingle: specify the exact RLUSD we want to receive
   const amountOut = parseUnits(opts.amount, config.rlusd.eth_decimals);
-  // Set a high amountInMaximum; real usage should quote first
-  const amountInMaximum = parseUnits("999999999", inToken.decimals);
+  const quoteResult = await publicClient.simulateContract({
+    address: UNISWAP_V3_QUOTER_V2 as `0x${string}`,
+    abi: UNISWAP_QUOTER_V2_ABI,
+    functionName: "quoteExactOutputSingle",
+    args: [
+      {
+        tokenIn: inToken.address as `0x${string}`,
+        tokenOut: rlusdAddress,
+        amountOut,
+        fee,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
+  });
+  const [quotedAmountIn] = quoteResult.result;
+  const amountInMaximum =
+    quotedAmountIn + (quotedAmountIn * BigInt(slippageBps)) / 10_000n;
 
   if (opts.dryRun) {
     logger.info("Dry run — no transaction will be submitted");
@@ -333,6 +388,15 @@ async function executeSwapBuy(
     logger.label("Amount Out", `${opts.amount} RLUSD`);
     logger.label("Token In", `${opts.with.toUpperCase()} (${inToken.address})`);
     logger.label("Fee Tier", `${fee / 10000}%`);
+    logger.label("Slippage", `${slippageBps / 100}%`);
+    logger.label(
+      "Quoted Amount In",
+      `${formatUnits(quotedAmountIn, inToken.decimals)} ${opts.with.toUpperCase()}`,
+    );
+    logger.label(
+      "Maximum Amount In",
+      `${formatUnits(amountInMaximum, inToken.decimals)} ${opts.with.toUpperCase()}`,
+    );
     logger.label("Router", routerAddress);
     return;
   }

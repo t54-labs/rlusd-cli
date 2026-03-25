@@ -8,6 +8,7 @@ import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet } from "../../types/index.js";
 import type { OutputFormat } from "../../types/index.js";
+import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 
 export function registerTrustlineCommand(parent: Command, program: Command): void {
   const trustlineCmd = parent.command("trustline").description("RLUSD trust line management on XRPL");
@@ -16,7 +17,10 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
     .command("setup")
     .description("Set up RLUSD trust line (required before receiving RLUSD on XRPL)")
     .option("--limit <amount>", "maximum RLUSD to hold", "1000000")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -27,7 +31,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -58,6 +62,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
         } else {
           logger.error(`Trust line setup failed: ${txResult}`);
           logger.label("Tx Hash", result.result.hash);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`Trust line setup failed: ${(err as Error).message}`);
@@ -92,7 +97,15 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
         });
 
         const rlusdLine = lines.result.lines.find(
-          (line) => line.currency === config.rlusd.xrpl_currency,
+          (line: {
+            currency: string;
+            account: string;
+            balance: string;
+            limit: string;
+            freeze?: boolean;
+          }) =>
+            line.currency === config.rlusd.xrpl_currency &&
+            line.account === config.rlusd.xrpl_issuer,
         );
 
         if (!rlusdLine) {
@@ -127,7 +140,10 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
   trustlineCmd
     .command("remove")
     .description("Remove RLUSD trust line (requires zero balance)")
-    .option("--password <password>", "wallet password")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
@@ -138,7 +154,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
           return;
         }
 
-        const password = opts.password || "default-dev-password";
+        const password = resolveWalletPassword(opts.password);
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -166,6 +182,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
           logger.label("Tx Hash", result.result.hash);
         } else {
           logger.error(`Trust line removal failed: ${txResult}`);
+          process.exitCode = 1;
         }
       } catch (err) {
         logger.error(`Trust line removal failed: ${(err as Error).message}`);

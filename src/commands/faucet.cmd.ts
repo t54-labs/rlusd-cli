@@ -72,6 +72,11 @@ async function fundXrpl(
 
   const fundedAddress = data.account?.address || address || "unknown";
   const amount = data.amount || data.balance || 0;
+  if (fundedAddress === "unknown" || amount <= 0) {
+    throw new Error(
+      "Faucet returned an unexpected response payload. No funded address or amount was found.",
+    );
+  }
 
   const result = {
     chain: "xrpl",

@@ -15,8 +15,10 @@ import { registerApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
+import { logger } from "./utils/logger.js";
+import packageJson from "../package.json";
 
-const VERSION = "0.1.0";
+const VERSION = packageJson.version;
 
 export function createProgram(): Command {
   const program = new Command();
@@ -27,12 +29,34 @@ export function createProgram(): Command {
       "Multi-chain CLI for Ripple USD (RLUSD) stablecoin operations across XRPL, Ethereum, and L2 networks",
     )
     .version(VERSION)
-    .option("--chain <chain>", "target chain: xrpl | ethereum | base | optimism | ink | unichain")
+    .option(
+      "--chain <chain>",
+      "target chain: xrpl | ethereum | base | optimism | ink | unichain",
+    )
     .option("--output <format>", "output format: table | json | json-compact", "table")
     .option("--network <network>", "override network: mainnet | testnet | devnet")
     .option("--verbose", "show detailed output")
-    .allowExcessArguments(true)
     .allowUnknownOption(false);
+
+  program.hook("preAction", (thisCommand) => {
+    const opts = thisCommand.optsWithGlobals();
+    process.env.RLUSD_RUNTIME_NETWORK = opts.network || "";
+    process.env.RLUSD_RUNTIME_OUTPUT = opts.output || "";
+    process.env.RLUSD_RUNTIME_CHAIN = opts.chain || "";
+    logger.setVerbose(Boolean(opts.verbose));
+    if (opts.verbose) {
+      logger.debug(
+        `runtime overrides => chain=${opts.chain || "none"}, output=${opts.output || "none"}, network=${opts.network || "none"}`,
+      );
+    }
+  });
+
+  program.hook("postAction", () => {
+    delete process.env.RLUSD_RUNTIME_NETWORK;
+    delete process.env.RLUSD_RUNTIME_OUTPUT;
+    delete process.env.RLUSD_RUNTIME_CHAIN;
+    logger.setVerbose(false);
+  });
 
   registerConfigCommand(program);
   registerWalletCommand(program);

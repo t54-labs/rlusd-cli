@@ -11,7 +11,7 @@ const MAINNET_PRESET: NetworkPreset = {
       json_rpc: "https://xrplcluster.com/",
     },
     ethereum: {
-      rpc: "https://eth.llamarpc.com",
+      rpc: "https://ethereum-rpc.publicnode.com",
     },
     base: {
       rpc: "https://mainnet.base.org",
@@ -29,7 +29,7 @@ const TESTNET_PRESET: NetworkPreset = {
       json_rpc: "https://s.altnet.rippletest.net:51234/",
     },
     ethereum: {
-      rpc: "https://rpc.sepolia.org",
+      rpc: "https://ethereum-sepolia-rpc.publicnode.com",
     },
     base: {
       rpc: "https://sepolia.base.org",
@@ -47,7 +47,7 @@ const DEVNET_PRESET: NetworkPreset = {
       json_rpc: "https://s.devnet.rippletest.net:51234/",
     },
     ethereum: {
-      rpc: "https://rpc.sepolia.org",
+      rpc: "https://ethereum-sepolia-rpc.publicnode.com",
     },
     base: {
       rpc: "https://sepolia.base.org",

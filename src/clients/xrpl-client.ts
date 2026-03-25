@@ -1,10 +1,20 @@
-import { Client } from "xrpl";
+import xrpl from "xrpl";
+const { Client } = xrpl;
 import { loadConfig } from "../config/config.js";
 
-let clientInstance: Client | null = null;
+type XrplClientInstance = InstanceType<typeof Client>;
+
+let clientInstance: XrplClientInstance | null = null;
 let currentUrl: string | null = null;
 
-export async function getXrplClient(): Promise<Client> {
+function dropsToXrpString(drops: string): string {
+  const value = BigInt(drops);
+  const whole = value / 1_000_000n;
+  const fraction = (value % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+export async function getXrplClient(): Promise<XrplClientInstance> {
   const config = loadConfig();
   const url = config.chains.xrpl?.websocket;
 
@@ -48,7 +58,7 @@ export async function getXrplBalance(address: string): Promise<{ xrp: string; rl
       ledger_index: "validated",
     });
     const drops = accountInfo.result.account_data.Balance;
-    xrpBalance = (parseInt(drops, 10) / 1_000_000).toString();
+    xrpBalance = dropsToXrpString(drops);
   } catch (err: unknown) {
     const error = err as { data?: { error?: string } };
     if (error.data?.error === "actNotFound") {
@@ -67,7 +77,7 @@ export async function getXrplBalance(address: string): Promise<{ xrp: string; rl
     });
 
     const rlusdLine = lines.result.lines.find(
-      (line) =>
+      (line: { currency: string; account: string; balance: string }) =>
         line.currency === config.rlusd.xrpl_currency &&
         line.account === config.rlusd.xrpl_issuer,
     );

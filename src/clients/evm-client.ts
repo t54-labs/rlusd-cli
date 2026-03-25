@@ -3,6 +3,7 @@ import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "
 import { loadConfig } from "../config/config.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
 import type { EvmChainName, NetworkEnvironment } from "../types/index.js";
+import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm-support.js";
 
 const clientCache = new Map<string, PublicClient>();
 
@@ -12,14 +13,16 @@ function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
       case "ethereum": return mainnet;
       case "base": return base;
       case "optimism": return optimism;
-      default: return mainnet;
+      default:
+        throw new Error(`Unsupported EVM chain: ${chain}`);
     }
   }
   switch (chain) {
     case "ethereum": return sepolia;
     case "base": return baseSepolia;
     case "optimism": return optimismSepolia;
-    default: return sepolia;
+    default:
+      throw new Error(`Unsupported EVM chain: ${chain}`);
   }
 }
 
@@ -39,7 +42,11 @@ export function getEvmPublicClient(chain: EvmChainName): PublicClient {
   const viemChain = getViemChain(chain, config.environment);
   const client = createPublicClient({
     chain: viemChain,
-    transport: http(rpcUrl),
+    transport: http(rpcUrl, {
+      timeout: 30_000,
+      retryCount: 2,
+      retryDelay: 1_000,
+    }),
   });
 
   clientCache.set(cacheKey, client as PublicClient);
@@ -51,8 +58,9 @@ export async function getEvmRlusdBalance(
   address: string,
 ): Promise<{ rlusd: string; native: string; nativeSymbol: string }> {
   const config = loadConfig();
+  assertActiveRlusdEvmChain(chain);
   const client = getEvmPublicClient(chain);
-  const contractAddress = config.rlusd.eth_contract as `0x${string}`;
+  const contractAddress = getRlusdContractAddress(chain, config);
   const accountAddress = address as `0x${string}`;
 
   const [rlusdRaw, nativeRaw] = await Promise.all([
@@ -70,4 +78,17 @@ export async function getEvmRlusdBalance(
   const nativeSymbol = chain === "ethereum" ? "ETH" : "ETH";
 
   return { rlusd, native, nativeSymbol };
+}
+
+export async function getEvmNativeBalance(
+  chain: EvmChainName,
+  address: string,
+): Promise<{ native: string; nativeSymbol: string }> {
+  const client = getEvmPublicClient(chain);
+  const accountAddress = address as `0x${string}`;
+  const nativeRaw = await client.getBalance({ address: accountAddress });
+  return {
+    native: formatUnits(nativeRaw, 18),
+    nativeSymbol: "ETH",
+  };
 }
