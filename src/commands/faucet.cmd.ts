@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
 import {
+  disconnectXrplClient,
   getXrplAccountInfo,
   getXrplTrustlineStatus,
 } from "../clients/xrpl-client.js";
@@ -63,6 +64,8 @@ export function registerFaucetCommand(program: Command): void {
       } catch (err) {
         logger.error(`Faucet request failed: ${(err as Error).message}`);
         process.exitCode = 1;
+      } finally {
+        await disconnectXrplClient().catch(() => {});
       }
     });
 
@@ -96,6 +99,8 @@ export function registerFaucetCommand(program: Command): void {
       } catch (err) {
         logger.error(`Mock RLUSD faucet request failed: ${(err as Error).message}`);
         process.exitCode = 1;
+      } finally {
+        await disconnectXrplClient().catch(() => {});
       }
     });
 }
