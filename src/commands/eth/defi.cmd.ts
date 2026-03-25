@@ -1,18 +1,16 @@
 import { Command } from "commander";
 import { createWalletClient, http, parseUnits, formatUnits, maxUint256, encodeFunctionData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "viem/chains";
-import type { Chain } from "viem";
 import { loadConfig } from "../../config/config.js";
 import { getDefaultWallet, isXrplWallet, resolveWalletForChain } from "../../wallet/manager.js";
 import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
-import { getEvmPublicClient, getViemChain as getResolvedViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
+import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { AAVE_POOL_ABI } from "../../abi/aave-pool.js";
 import { UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-router.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment, ResolvedAsset } from "../../types/index.js";
+import type { EvmChainName, OutputFormat, StoredEvmWallet, ResolvedAsset } from "../../types/index.js";
 import { AAVE_V3_POOL_ETHEREUM } from "../../config/constants.js";
 import type { AppConfig } from "../../types/index.js";
 
@@ -29,31 +27,6 @@ import { parseFeeTier, resolveTokenAddress, resolveUniswapQuoter } from "./swap.
 const AAVE_VARIABLE_RATE_MODE = 2n;
 const BASE_CURRENCY_DECIMALS = 8;
 const HEALTH_FACTOR_DECIMALS = 18;
-
-function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
-  if (env === "mainnet") {
-    switch (chain) {
-      case "base":
-        return base;
-      case "optimism":
-        return optimism;
-      case "ethereum":
-        return mainnet;
-      default:
-        throw new Error(`Unsupported EVM chain: ${chain}`);
-    }
-  }
-  switch (chain) {
-    case "base":
-      return baseSepolia;
-    case "optimism":
-      return optimismSepolia;
-    case "ethereum":
-      return sepolia;
-    default:
-      throw new Error(`Unsupported EVM chain: ${chain}`);
-  }
-}
 
 function assertEthereumAave(chain: EvmChainName, config: ReturnType<typeof loadConfig>): void {
   if (chain !== "ethereum") {
@@ -627,11 +600,11 @@ export function registerTopLevelDefiCommand(program: Command): void {
               venue: opts.venue,
               asset_symbol: "RLUSD",
               amount: opts.amount,
-              reference_supply_apy: "4.2000",
+              reference_supply_apy: null,
               collateral_supported: false,
               approval_mode: "approve",
             },
-            warnings: ["not_live_market_data", "preview_only", "collateral_unsupported"],
+            warnings: ["apy_unavailable", "preview_only", "collateral_unsupported"],
           }),
         );
       } catch (error) {
@@ -774,7 +747,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
         const account = privateKeyToAccount(privateKey as `0x${string}`);
         const walletClient = createWalletClient({
           account,
-          chain: getResolvedViemChain(resolved.chain, resolved.network),
+          chain: getViemChain(resolved.chain, resolved.network),
           transport: http(rpcUrl),
         });
 
@@ -785,14 +758,20 @@ export function registerTopLevelDefiCommand(program: Command): void {
           value: BigInt(String(step.value ?? "0")),
         }));
 
-        const results: Array<{ step: string; tx_hash: `0x${string}` }> = [];
+        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
+        const results: Array<{ step: string; tx_hash: `0x${string}`; status: string }> = [];
         for (const step of steps) {
           const txHash = await walletClient.sendTransaction({
             to: step.to,
             data: step.data,
             value: step.value,
           });
-          results.push({ step: step.step, tx_hash: txHash });
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+          const status = receipt.status === "success" ? "success" : "reverted";
+          results.push({ step: step.step, tx_hash: txHash, status });
+          if (receipt.status !== "success") {
+            throw new Error(`Step "${step.step}" reverted (tx: ${txHash}). Aborting remaining steps.`);
+          }
         }
 
         emitEnvelope(

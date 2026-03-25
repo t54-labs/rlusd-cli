@@ -72,7 +72,7 @@ describe("Config Command E2E", () => {
   it("should reject invalid network", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["config", "set", "--network", "invalid"], { from: "user" });
+    program.parse(["config", "set", "-n", "invalid"], { from: "user" });
     const output = consoleOutput.join("\n");
     expect(output).toContain("Invalid network");
   });

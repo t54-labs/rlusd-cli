@@ -68,12 +68,18 @@ export function createProgram(): Command {
 
   program.hook("preAction", (thisCommand, actionCommand) => {
     const opts = actionCommand.optsWithGlobals();
+    const globalNetwork = thisCommand.opts().network as string | undefined;
     const machineJson = Boolean(opts.json);
+
+    if (globalNetwork && !["mainnet", "testnet", "devnet"].includes(globalNetwork)) {
+      throw new Error(`Invalid --network value: ${globalNetwork}. Use mainnet, testnet, or devnet.`);
+    }
+
     const config = loadConfig();
     const resolvedChain = (opts.chain || config.default_chain) as string;
     const resolvedNetwork =
-      opts.network && ["mainnet", "testnet", "devnet"].includes(opts.network)
-        ? opts.network
+      globalNetwork && ["mainnet", "testnet", "devnet"].includes(globalNetwork)
+        ? globalNetwork
         : config.environment;
 
     if (machineJson) {
@@ -82,11 +88,7 @@ export function createProgram(): Command {
       beginAgentCapture(getCommandPath(actionCommand), getEnvelopeChainLabel(resolvedChain, resolvedNetwork));
     }
 
-    if (opts.network && !["mainnet", "testnet", "devnet"].includes(opts.network)) {
-      throw new Error(`Invalid --network value: ${opts.network}. Use mainnet, testnet, or devnet.`);
-    }
-
-    process.env.RLUSD_RUNTIME_NETWORK = opts.network || "";
+    process.env.RLUSD_RUNTIME_NETWORK = globalNetwork || "";
     process.env.RLUSD_RUNTIME_OUTPUT = machineJson ? "json" : (opts.output || "");
     process.env.RLUSD_RUNTIME_CHAIN = opts.chain || "";
     logger.setVerbose(Boolean(opts.verbose));

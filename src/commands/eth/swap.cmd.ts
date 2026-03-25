@@ -1,12 +1,10 @@
 import { Command } from "commander";
 import { createWalletClient, http, parseUnits, formatUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "viem/chains";
-import type { Chain } from "viem";
 import { loadConfig } from "../../config/config.js";
 import { getDefaultWallet, isXrplWallet } from "../../wallet/manager.js";
 import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
-import { getEvmPublicClient } from "../../clients/evm-client.js";
+import { getEvmPublicClient, getViemChain } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { UNISWAP_V3_ROUTER_ABI, UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-router.js";
 import {
@@ -17,7 +15,7 @@ import {
 import type { AppConfig } from "../../types/index.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, OutputFormat, StoredEvmWallet, NetworkEnvironment } from "../../types/index.js";
+import type { EvmChainName, OutputFormat, StoredEvmWallet } from "../../types/index.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 
@@ -30,25 +28,6 @@ export function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0
 
 export function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
   return (config.contracts?.[chain]?.uniswap_quoter || UNISWAP_V3_QUOTER_V2) as `0x${string}`;
-}
-
-function getViemChain(chain: EvmChainName, env: NetworkEnvironment): Chain {
-  if (env === "mainnet") {
-    switch (chain) {
-      case "base": return base;
-      case "optimism": return optimism;
-      case "ethereum": return mainnet;
-      default:
-        throw new Error(`Unsupported EVM chain: ${chain}`);
-    }
-  }
-  switch (chain) {
-    case "base": return baseSepolia;
-    case "optimism": return optimismSepolia;
-    case "ethereum": return sepolia;
-    default:
-      throw new Error(`Unsupported EVM chain: ${chain}`);
-  }
 }
 
 export function resolveTokenAddress(symbol: string): { address: string; decimals: number } | null {

@@ -198,7 +198,7 @@ describe("Agent JSON Contract", () => {
   it("should emit structured JSON errors to stderr with --json", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--json", "--chain", "xrpl", "config", "set", "--network", "invalid"], { from: "user" });
+    program.parse(["--json", "--chain", "xrpl", "config", "set", "-n", "invalid"], { from: "user" });
 
     expect(stdout).toEqual([]);
     const envelope = JSON.parse(stderr.join("\n"));
@@ -209,6 +209,14 @@ describe("Agent JSON Contract", () => {
     expect(envelope.error.code).toEqual(expect.any(String));
     expect(envelope.error.message).toContain("Invalid network");
     expect(envelope.error.retryable).toBe(false);
+  });
+
+  it("should reject invalid global --network before command runs", () => {
+    const program = createProgram();
+    program.exitOverride();
+    expect(() =>
+      program.parse(["--network", "garbage", "config", "get"], { from: "user" }),
+    ).toThrow("Invalid --network value: garbage");
   });
 
   it("should emit JSON errors for wrong-chain wallet selections", async () => {
@@ -844,6 +852,148 @@ describe("DeFi Command Registration", () => {
     const output = JSON.parse(stderr.join("\n"));
     expect(output.ok).toBe(false);
     expect(output.error.message).toContain("explicit confirmation");
+  });
+
+  it("should reject execute with wrong action type", async () => {
+    const envelope = await createPreparedPlan({
+      command: "evm.transfer.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "evm.transfer",
+      requires_confirmation: false,
+      human_summary: "Transfer RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { from: "eth-ops", to: "0x0000000000000000000000000000000000000001", amount: "10" },
+      intent: { to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", value: "0", data: "0xa9059cbb" },
+      warnings: [],
+    });
+
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("cannot be executed by defi.supply.execute");
+  });
+
+  it("should reject execute when plan is missing params.from", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: false,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { venue: "aave", amount: "100" },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+        ],
+      },
+      warnings: [],
+    });
+
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("missing supply sender");
+  });
+
+  it("should reject execute when wallet does not exist", async () => {
+    const envelope = await createPreparedPlan({
+      command: "defi.supply.prepare",
+      chain: "ethereum-sepolia",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "defi.supply",
+      requires_confirmation: false,
+      human_summary: "Supply RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "ethereum",
+        family: "evm",
+        address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+        decimals: 18,
+      },
+      params: { venue: "aave", from: "nonexistent-wallet", amount: "100" },
+      intent: {
+        venue: "aave",
+        steps: [
+          { step: "approve", to: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", data: "0x095ea7b3", value: "0" },
+        ],
+      },
+      warnings: [],
+    });
+
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "supply", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.code).toBe("EXECUTION_FAILED");
   });
 });
 
