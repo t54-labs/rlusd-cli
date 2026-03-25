@@ -18,3 +18,15 @@ export function validateAddress(address: string, chain: ChainName): boolean {
   if (chain === "xrpl") return isXrplAddress(address);
   return isEvmAddress(address);
 }
+
+export function isXrplTransactionHash(hash: string): boolean {
+  return /^[0-9A-Fa-f]{64}$/.test(hash);
+}
+
+export function normalizeXrplTransactionHash(hash: string): string {
+  const normalized = hash.trim().toUpperCase();
+  if (!isXrplTransactionHash(normalized)) {
+    throw new Error(`Invalid XRPL transaction hash: ${hash}`);
+  }
+  return normalized;
+}

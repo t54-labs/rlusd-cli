@@ -49,6 +49,8 @@ describe("Command Registration", () => {
     expect(trustlineCmd).toBeDefined();
 
     const subcommands = trustlineCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
     expect(subcommands).toContain("setup");
     expect(subcommands).toContain("status");
     expect(subcommands).toContain("remove");
@@ -56,6 +58,38 @@ describe("Command Registration", () => {
     const setupCmd = trustlineCmd!.commands.find((c) => c.name() === "setup");
     const setupOptionNames = setupCmd!.options.map((o) => o.long);
     expect(setupOptionNames).toContain("--wallet");
+  });
+
+  it("should register xrpl account info command", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const accountCmd = xrplCmd!.commands.find((c) => c.name() === "account");
+    expect(accountCmd).toBeDefined();
+
+    const infoCmd = accountCmd!.commands.find((c) => c.name() === "info");
+    expect(infoCmd).toBeDefined();
+  });
+
+  it("should register xrpl payment prepare execute and receipt subcommands", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const paymentCmd = xrplCmd!.commands.find((c) => c.name() === "payment");
+    expect(paymentCmd).toBeDefined();
+
+    const subcommands = paymentCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+    expect(subcommands).toContain("receipt");
+  });
+
+  it("should register xrpl tx wait subcommand", () => {
+    const program = createProgram();
+    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
+    const txCmd = xrplCmd!.commands.find((c) => c.name() === "tx");
+    expect(txCmd).toBeDefined();
+
+    const subcommands = txCmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("wait");
   });
 
   it("should register send command with required options", () => {
@@ -619,6 +653,82 @@ describe("Ethereum Command Registration", () => {
       program.exitOverride();
       await program.parseAsync(
         ["--json", "evm", "transfer", "execute", "--plan", envelope.data.plan_path],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stdout).toEqual([]);
+    const output = JSON.parse(stderr.join("\n"));
+    expect(output.ok).toBe(false);
+    expect(output.error.message).toContain("explicit confirmation");
+  });
+});
+
+describe("XRPL Command Registration", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    ensureConfigDir();
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("should require explicit confirmation for xrpl trustline execute", async () => {
+    const envelope = await createPreparedPlan({
+      command: "xrpl.trustline.prepare",
+      chain: "xrpl-mainnet",
+      timestamp: "2026-03-25T00:00:00.000Z",
+      action: "xrpl.trustline",
+      requires_confirmation: true,
+      human_summary: "Trustline RLUSD",
+      asset: {
+        symbol: "RLUSD",
+        name: "Ripple USD",
+        chain: "xrpl",
+        family: "xrpl",
+        issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        currency: "524C555344000000000000000000000000000000",
+      },
+      params: {
+        address: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        limit: "100000",
+      },
+      intent: {
+        account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        transaction_type: "TrustSet",
+        tx_json: {
+          TransactionType: "TrustSet",
+          Account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+          LimitAmount: {
+            currency: "524C555344000000000000000000000000000000",
+            issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+            value: "100000",
+          },
+        },
+      },
+      warnings: ["mainnet", "trustline_change"],
+    });
+
+    let stdout: string[] = [];
+    let stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "xrpl", "trustline", "execute", "--plan", envelope.data.plan_path],
         { from: "user" },
       );
     } finally {

@@ -148,6 +148,38 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(stored).toEqual(output);
   });
 
+  it("should create and store an xrpl trustline plan with --json", async () => {
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "xrpl",
+        "trustline",
+        "prepare",
+        "--chain",
+        "xrpl-mainnet",
+        "--address",
+        "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        "--limit",
+        "100000",
+      ],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.command).toBe("xrpl.trustline.prepare");
+    expect(output.data.plan_id).toMatch(/^plan_[0-9a-f]{12}$/);
+    expect(output.data.action).toBe("xrpl.trustline");
+    expect(output.data.plan_path).toBeTruthy();
+    expect(existsSync(output.data.plan_path)).toBe(true);
+
+    const stored = JSON.parse(readFileSync(output.data.plan_path, "utf-8"));
+    expect(stored).toEqual(output);
+  });
+
   it("should output bash completion script", () => {
     const program = createProgram();
     program.exitOverride();

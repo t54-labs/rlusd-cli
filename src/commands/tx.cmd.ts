@@ -2,7 +2,12 @@ import { Command } from "commander";
 import { createErrorEnvelope, createSuccessEnvelope } from "../agent/envelope.js";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
-import { getXrplClient, disconnectXrplClient } from "../clients/xrpl-client.js";
+import {
+  getXrplClient,
+  disconnectXrplClient,
+  resolveXrplChainRef,
+  waitForXrplTransaction,
+} from "../clients/xrpl-client.js";
 import { getEvmPublicClient, resolveEvmChainRef } from "../clients/evm-client.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
@@ -167,6 +172,45 @@ export function registerEvmTxCommand(parent: Command): void {
           }),
         );
         process.exitCode = 1;
+      }
+    });
+}
+
+export function registerXrplTxCommand(parent: Command, program: Command): void {
+  const txCmd = parent.command("tx").description("XRPL transaction monitoring commands");
+
+  txCmd
+    .command("wait")
+    .description("Wait for an XRPL transaction to validate")
+    .option("--chain <chain>", "target XRPL chain label, e.g. xrpl-mainnet")
+    .requiredOption("--hash <hash>", "transaction hash")
+    .action(async (opts: { chain?: string; hash: string }) => {
+      const config = loadConfig();
+      try {
+        const chainInput = opts.chain || (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const status = await waitForXrplTransaction(resolved.network, opts.hash);
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "xrpl.tx.wait",
+            chain: resolved.label,
+            timestamp: new Date().toISOString(),
+            data: status,
+          }),
+        );
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "xrpl.tx.wait",
+            timestamp: new Date().toISOString(),
+            code: "TX_WAIT_FAILED",
+            message:
+              error instanceof Error ? error.message : "Unable to wait for XRPL transaction.",
+          }),
+        );
+        process.exitCode = 1;
+      } finally {
+        await disconnectXrplClient().catch(() => {});
       }
     });
 }

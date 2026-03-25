@@ -5,11 +5,12 @@ import { registerBalanceCommand } from "./commands/balance.cmd.js";
 import { registerEvmTransferCommand, registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
+import { registerPaymentCommand } from "./commands/xrpl/payment.cmd.js";
 import { registerCompletionCommand } from "./commands/completion.cmd.js";
 import { registerDexCommand } from "./commands/xrpl/dex.cmd.js";
 import { registerAmmCommand } from "./commands/xrpl/amm.cmd.js";
 import { registerPathfindCommand } from "./commands/xrpl/pathfind.cmd.js";
-import { registerEvmTxCommand, registerTxCommand } from "./commands/tx.cmd.js";
+import { registerEvmTxCommand, registerTxCommand, registerXrplTxCommand } from "./commands/tx.cmd.js";
 import { registerPriceCommand } from "./commands/price.cmd.js";
 import { registerApproveCommand, registerEvmApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
@@ -120,6 +121,8 @@ export function createProgram(): Command {
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);
+  registerPaymentCommand(xrplCmd, program);
+  registerXrplTxCommand(xrplCmd, program);
   registerDexCommand(xrplCmd, program);
   registerAmmCommand(xrplCmd, program);
   registerPathfindCommand(xrplCmd, program);
