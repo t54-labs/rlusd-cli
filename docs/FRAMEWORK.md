@@ -1033,7 +1033,7 @@ rlusd --help
 ### 7.2 One-Line Script Install (Solana-style)
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/xxx/rlusd-cli/main/scripts/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/t54-labs/rlusd-cli/main/scripts/install.sh | bash
 ```
 
 The script detects the environment, installs Node.js if missing, and runs `npm install -g`.

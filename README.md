@@ -36,13 +36,13 @@ npm install -g @rlusd/cli
 ### One-line installer
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/xxx/rlusd-cli/main/scripts/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/t54-labs/rlusd-cli/main/scripts/install.sh | bash
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/xxx/rlusd-cli.git
+git clone https://github.com/t54-labs/rlusd-cli.git
 cd rlusd-cli
 npm install
 npm run build
