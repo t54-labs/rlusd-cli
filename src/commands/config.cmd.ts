@@ -7,6 +7,7 @@ import type { ChainName, OutputFormat } from "../types/index.js";
 
 const VALID_CHAINS: ChainName[] = ["xrpl", "ethereum", "base", "optimism", "ink", "unichain"];
 const VALID_FORMATS: OutputFormat[] = ["table", "json", "json-compact"];
+const VALID_PRICE_PROVIDERS = ["coingecko"] as const;
 
 export function registerConfigCommand(program: Command): void {
   const configCmd = program.command("config").description("Configuration management");
@@ -66,7 +67,10 @@ export function registerConfigCommand(program: Command): void {
     .option("--rpc <url>", "set RPC/WebSocket URL for a chain (requires --chain)")
     .option("--default-chain <chain>", "set default chain")
     .option("--format <format>", "set output format: table | json | json-compact")
-    .option("--price-provider <provider>", "price API provider: coingecko")
+    .option(
+      "--price-provider <provider>",
+      `price API provider: ${VALID_PRICE_PROVIDERS.join(", ")}`,
+    )
     .option("--price-url <url>", "price API base URL (e.g. https://pro-api.coingecko.com/api/v3)")
     .option("--price-api-key <key>", "price API key (for paid tiers)")
     .option("--uniswap-router <address>", "Uniswap V3 SwapRouter address (requires --chain)")
@@ -128,6 +132,18 @@ export function registerConfigCommand(program: Command): void {
       }
 
       if (opts.priceProvider || opts.priceUrl || opts.priceApiKey) {
+        if (
+          opts.priceProvider &&
+          !VALID_PRICE_PROVIDERS.includes(
+            opts.priceProvider as (typeof VALID_PRICE_PROVIDERS)[number],
+          )
+        ) {
+          logger.error(
+            `Invalid price provider: ${opts.priceProvider}. Supported: ${VALID_PRICE_PROVIDERS.join(", ")}`,
+          );
+          process.exitCode = 1;
+          return;
+        }
         const updates: Record<string, string> = {};
         if (opts.priceProvider) updates.provider = opts.priceProvider;
         if (opts.priceUrl) updates.base_url = opts.priceUrl;

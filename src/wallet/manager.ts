@@ -71,9 +71,7 @@ export function setDefaultWallet(chain: ChainName, walletName: string): void {
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' does not exist.`);
   }
-  const walletIsXrpl = wallet.chain === "xrpl";
-  const targetIsXrpl = chain === "xrpl";
-  if (walletIsXrpl !== targetIsXrpl) {
+  if (wallet.chain !== chain) {
     throw new Error(
       `Wallet '${walletName}' is a ${wallet.chain} wallet and cannot be used as default for ${chain}.`,
     );

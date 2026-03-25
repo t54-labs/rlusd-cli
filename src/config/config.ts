@@ -34,6 +34,19 @@ export function getWalletsDir(): string {
   return join(getConfigDir(), WALLETS_DIR);
 }
 
+function mergeChains(
+  defaults: Record<string, { websocket?: string; json_rpc?: string; rpc?: string; default_wallet?: string }>,
+  overrides?: Record<string, { websocket?: string; json_rpc?: string; rpc?: string; default_wallet?: string }>,
+): Record<string, { websocket?: string; json_rpc?: string; rpc?: string; default_wallet?: string }> {
+  if (!overrides) return defaults;
+
+  const merged = { ...defaults };
+  for (const [chain, chainOverrides] of Object.entries(overrides)) {
+    merged[chain] = { ...(defaults[chain] ?? {}), ...chainOverrides };
+  }
+  return merged;
+}
+
 function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
   const preset = getNetworkPreset(env);
   return {
@@ -75,7 +88,7 @@ function applyRuntimeOverrides(config: AppConfig): AppConfig {
     config = {
       ...config,
       environment: runtimeNetwork,
-      chains: { ...config.chains, ...preset.chains },
+      chains: mergeChains(config.chains, preset.chains),
     };
   }
 
@@ -131,7 +144,7 @@ export function loadConfig(): AppConfig {
     ...defaultConfig,
     ...parsed,
     environment,
-    chains: { ...defaultConfig.chains, ...parsed.chains },
+    chains: mergeChains(defaultConfig.chains, parsed.chains),
     rlusd: { ...defaultConfig.rlusd, ...parsed.rlusd },
     price_api: defaultConfig.price_api
       ? { ...defaultConfig.price_api, ...(parsed.price_api ?? {}) }
@@ -154,7 +167,7 @@ export function setNetwork(env: NetworkEnvironment): AppConfig {
   const config = loadConfig();
   const preset = getNetworkPreset(env);
   config.environment = env;
-  config.chains = { ...config.chains, ...preset.chains };
+  config.chains = mergeChains(config.chains, preset.chains);
   saveConfig(config);
   return config;
 }

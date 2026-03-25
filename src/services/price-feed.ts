@@ -21,7 +21,7 @@ export async function fetchXrpUsdPrice(priceApi?: PriceApiConfig): Promise<XrpUs
     if (provider === "coingecko") {
       return await fetchFromCoingecko(baseUrl, cfg.api_key);
     }
-    return await fetchFromCoingecko(baseUrl, cfg.api_key);
+    return null;
   } catch {
     return null;
   }

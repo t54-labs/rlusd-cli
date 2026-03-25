@@ -238,4 +238,11 @@ describe("Wallet Manager", () => {
     saveWallet(serializeEvmWallet("evm-only", generateEvmWallet(), "p"));
     expect(() => setDefaultWallet("xrpl", "evm-only")).toThrow("cannot be used");
   });
+
+  it("should reject setting a base wallet as default for ethereum", () => {
+    saveWallet(serializeEvmWallet("base-wallet", generateEvmWallet(), "p", "base"));
+    expect(() => setDefaultWallet("ethereum", "base-wallet")).toThrow(
+      "cannot be used",
+    );
+  });
 });

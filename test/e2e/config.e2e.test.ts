@@ -72,9 +72,13 @@ describe("Config Command E2E", () => {
   it("should reject invalid network", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["config", "set", "--network", "invalid"], { from: "user" });
+    try {
+      program.parse(["config", "set", "--network", "invalid"], { from: "user" });
+    } catch {
+      // expected: preAction hook throws
+    }
     const output = consoleOutput.join("\n");
-    expect(output).toContain("Invalid network");
+    expect(output).toContain("Invalid --network value");
   });
 
   it("should set custom RPC with 'config set --chain ethereum --rpc <url>'", () => {

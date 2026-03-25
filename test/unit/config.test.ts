@@ -104,6 +104,18 @@ describe("Config System", () => {
       expect(config.chains.xrpl).toBeDefined();
     });
 
+    it("should deep-merge partial chain config with default RPC values", () => {
+      ensureConfigDir();
+      const partialYaml =
+        "environment: testnet\nchains:\n  ethereum:\n    default_wallet: mywallet\n";
+      fsWriteFileSync(getConfigPath(), partialYaml, "utf-8");
+
+      const config = loadConfig();
+      expect(config.chains.ethereum.default_wallet).toBe("mywallet");
+      expect(config.chains.ethereum.rpc).toBeTruthy();
+      expect(config.chains.ethereum.rpc).toContain("sepolia");
+    });
+
     it("should include all chain configs from the preset", () => {
       const config = loadConfig();
       expect(config.chains.xrpl).toBeDefined();
