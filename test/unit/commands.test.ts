@@ -116,20 +116,6 @@ describe("Command Registration", () => {
 
     const fundCmd = faucetCmd!.commands.find((c) => c.name() === "fund");
     expect(fundCmd).toBeDefined();
-    const rlusdCmd = faucetCmd!.commands.find((c) => c.name() === "rlusd");
-    expect(rlusdCmd).toBeDefined();
-  });
-
-  it("should register xrpl mock subcommands", () => {
-    const program = createProgram();
-    const xrplCmd = program.commands.find((c) => c.name() === "xrpl");
-    const mockCmd = xrplCmd!.commands.find((c) => c.name() === "mock");
-    expect(mockCmd).toBeDefined();
-
-    const subcommands = mockCmd!.commands.map((c) => c.name());
-    expect(subcommands).toContain("bootstrap");
-    expect(subcommands).toContain("mint");
-    expect(subcommands).toContain("faucet-serve");
   });
 
   it("should register wallet subcommands", () => {

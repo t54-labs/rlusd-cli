@@ -18,42 +18,16 @@ describe("XRPL faucet smart routing", () => {
       decideXrplFundingStrategy({
         accountExists: true,
         xrpBalance: "0",
-        trustlinePresent: false,
-        hasMockRlusdFaucet: true,
       }),
     ).toBe("xrp");
   });
 
-  it("should request RLUSD when account has XRP and trustline and faucet exist", () => {
+  it("should direct users to the official RLUSD faucet when account has XRP", () => {
     expect(
       decideXrplFundingStrategy({
         accountExists: true,
         xrpBalance: "25",
-        trustlinePresent: true,
-        hasMockRlusdFaucet: true,
       }),
     ).toBe("rlusd");
-  });
-
-  it("should error when account has XRP but no mock faucet is configured", () => {
-    expect(
-      decideXrplFundingStrategy({
-        accountExists: true,
-        xrpBalance: "25",
-        trustlinePresent: true,
-        hasMockRlusdFaucet: false,
-      }),
-    ).toBe("error");
-  });
-
-  it("should error when account has XRP but trustline is missing", () => {
-    expect(
-      decideXrplFundingStrategy({
-        accountExists: true,
-        xrpBalance: "25",
-        trustlinePresent: false,
-        hasMockRlusdFaucet: true,
-      }),
-    ).toBe("error");
   });
 });

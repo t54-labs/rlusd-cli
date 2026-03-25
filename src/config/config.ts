@@ -2,9 +2,17 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import type { AppConfig, NetworkEnvironment, ChainName, OutputFormat, ChainContracts } from "../types/index.js";
+import type {
+  AppConfig,
+  NetworkEnvironment,
+  ChainName,
+  OutputFormat,
+  ChainContracts,
+  FaucetConfig,
+} from "../types/index.js";
 import {
   RLUSD_XRPL_ISSUER,
+  RLUSD_XRPL_ISSUER_TESTNET,
   RLUSD_XRPL_CURRENCY_HEX,
   RLUSD_ETH_CONTRACT,
   RLUSD_ETH_DECIMALS,
@@ -52,15 +60,25 @@ function mergeChains(
   return merged;
 }
 
+function sanitizeFaucetConfig(
+  faucet: Partial<AppConfig["faucet"]> | undefined,
+): FaucetConfig {
+  return {
+    xrpl_testnet: faucet?.xrpl_testnet || DEFAULT_FAUCET.xrpl_testnet,
+    xrpl_devnet: faucet?.xrpl_devnet || DEFAULT_FAUCET.xrpl_devnet,
+  };
+}
+
 function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
   const preset = getNetworkPreset(env);
+  const xrplIssuer = env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER;
   return {
     environment: env,
     default_chain: "xrpl",
     output_format: "table",
     chains: preset.chains,
     rlusd: {
-      xrpl_issuer: RLUSD_XRPL_ISSUER,
+      xrpl_issuer: xrplIssuer,
       xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
       eth_contract: RLUSD_ETH_CONTRACT,
       eth_decimals: RLUSD_ETH_DECIMALS,
@@ -68,7 +86,7 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
     },
     price_api: { ...DEFAULT_PRICE_API },
     contracts: structuredClone(DEFAULT_CONTRACTS),
-    faucet: { ...DEFAULT_FAUCET },
+    faucet: sanitizeFaucetConfig(DEFAULT_FAUCET),
   };
 }
 
@@ -159,9 +177,10 @@ export function loadConfig(): AppConfig {
       ? { ...defaultConfig.price_api, ...(parsed.price_api ?? {}) }
       : parsed.price_api,
     contracts: mergedContracts,
-    faucet: defaultConfig.faucet
-      ? { ...defaultConfig.faucet, ...(parsed.faucet ?? {}) }
-      : parsed.faucet,
+    faucet: sanitizeFaucetConfig({
+      ...defaultConfig.faucet,
+      ...(parsed.faucet ?? {}),
+    }),
   });
 }
 
@@ -177,6 +196,11 @@ export function setNetwork(env: NetworkEnvironment): AppConfig {
   const preset = getNetworkPreset(env);
   config.environment = env;
   config.chains = mergeChains(config.chains, preset.chains);
+  config.rlusd = {
+    ...config.rlusd,
+    xrpl_issuer: env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER,
+    xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
+  };
   saveConfig(config);
   return config;
 }
@@ -216,20 +240,6 @@ export function setPriceApi(updates: { provider?: string; base_url?: string; api
   return config;
 }
 
-export function setRlusdXrplAsset(updates: {
-  issuer?: string;
-  currency?: string;
-}): AppConfig {
-  const config = loadConfig();
-  config.rlusd = {
-    ...config.rlusd,
-    ...(updates.issuer ? { xrpl_issuer: updates.issuer } : {}),
-    ...(updates.currency ? { xrpl_currency: updates.currency } : {}),
-  };
-  saveConfig(config);
-  return config;
-}
-
 const VALID_CONTRACT_FIELDS: ReadonlySet<keyof ChainContracts> = new Set([
   "uniswap_router",
   "uniswap_quoter",
@@ -250,22 +260,10 @@ export function setContract(chain: ChainName, field: keyof ChainContracts, addre
 
 export function setFaucetUrl(env: "testnet" | "devnet", url: string): AppConfig {
   const config = loadConfig();
-  if (!config.faucet) {
-    config.faucet = { xrpl_testnet: "", xrpl_devnet: "", rlusd_mock_url: "" };
-  }
-  if (env === "testnet") config.faucet.xrpl_testnet = url;
-  else config.faucet.xrpl_devnet = url;
-  saveConfig(config);
-  return config;
-}
-
-export function setMockRlusdFaucetUrl(url: string): AppConfig {
-  const config = loadConfig();
-  config.faucet = {
-    xrpl_testnet: config.faucet?.xrpl_testnet || DEFAULT_FAUCET.xrpl_testnet,
-    xrpl_devnet: config.faucet?.xrpl_devnet || DEFAULT_FAUCET.xrpl_devnet,
-    rlusd_mock_url: url,
-  };
+  const faucet = sanitizeFaucetConfig(config.faucet);
+  if (env === "testnet") faucet.xrpl_testnet = url;
+  else faucet.xrpl_devnet = url;
+  config.faucet = faucet;
   saveConfig(config);
   return config;
 }

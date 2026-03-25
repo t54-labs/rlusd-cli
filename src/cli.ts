@@ -7,7 +7,6 @@ import { registerFiatCommand } from "./commands/fiat.cmd.js";
 import { registerEvmTransferCommand, registerSendCommand } from "./commands/send.cmd.js";
 import { registerFaucetCommand } from "./commands/faucet.cmd.js";
 import { registerTrustlineCommand } from "./commands/xrpl/trustline.cmd.js";
-import { registerMockCommand } from "./commands/xrpl/mock.cmd.js";
 import { registerPaymentCommand } from "./commands/xrpl/payment.cmd.js";
 import { registerCompletionCommand } from "./commands/completion.cmd.js";
 import { registerDexCommand } from "./commands/xrpl/dex.cmd.js";
@@ -133,7 +132,6 @@ export function createProgram(): Command {
 
   const xrplCmd = program.command("xrpl").description("XRPL-specific operations");
   registerTrustlineCommand(xrplCmd, program);
-  registerMockCommand(xrplCmd, program);
   registerPaymentCommand(xrplCmd, program);
   registerXrplTxCommand(xrplCmd, program);
   registerDexCommand(xrplCmd, program);

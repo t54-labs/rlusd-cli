@@ -36,7 +36,6 @@ export interface ChainContracts {
 export interface FaucetConfig {
   xrpl_testnet: string;
   xrpl_devnet: string;
-  rlusd_mock_url?: string;
 }
 
 export interface AppConfig {

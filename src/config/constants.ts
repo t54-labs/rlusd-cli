@@ -1,8 +1,11 @@
 import type { PriceApiConfig } from "../types/index.js";
 
-export const RLUSD_XRPL_ISSUER = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
+export const RLUSD_XRPL_ISSUER_MAINNET = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
+export const RLUSD_XRPL_ISSUER_TESTNET = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
+export const RLUSD_XRPL_ISSUER = RLUSD_XRPL_ISSUER_MAINNET;
 export const RLUSD_XRPL_CURRENCY = "RLUSD";
 export const RLUSD_XRPL_CURRENCY_HEX = "524C555344000000000000000000000000000000";
+export const RLUSD_PUBLIC_TESTNET_FAUCET_URL = "https://tryrlusd.com/";
 
 export const RLUSD_ETH_CONTRACT = "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD";
 export const RLUSD_ETH_DECIMALS = 18;
@@ -38,7 +41,6 @@ export const DEFAULT_CONTRACTS: Record<string, { uniswap_router?: string; uniswa
 export const DEFAULT_FAUCET = {
   xrpl_testnet: XRPL_TESTNET_FAUCET,
   xrpl_devnet: XRPL_DEVNET_FAUCET,
-  rlusd_mock_url: "",
 };
 
 export const WELL_KNOWN_TOKENS: Record<string, { address: string; decimals: number; name: string }> = {

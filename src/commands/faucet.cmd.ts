@@ -1,24 +1,26 @@
 import { Command } from "commander";
+import { spawn } from "node:child_process";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
 import {
   disconnectXrplClient,
   getXrplAccountInfo,
-  getXrplTrustlineStatus,
 } from "../clients/xrpl-client.js";
 import { logger } from "../utils/logger.js";
 import { formatOutput } from "../utils/format.js";
-import { XRPL_TESTNET_FAUCET, XRPL_DEVNET_FAUCET } from "../config/constants.js";
+import {
+  XRPL_TESTNET_FAUCET,
+  XRPL_DEVNET_FAUCET,
+  RLUSD_PUBLIC_TESTNET_FAUCET_URL,
+} from "../config/constants.js";
 import type { AppConfig } from "../types/index.js";
 import type { ChainName, OutputFormat } from "../types/index.js";
 
-type XrplFundingStrategy = "xrp" | "rlusd" | "error";
+type XrplFundingStrategy = "xrp" | "rlusd";
 
 export function decideXrplFundingStrategy(input: {
   accountExists: boolean;
   xrpBalance: string;
-  trustlinePresent: boolean;
-  hasMockRlusdFaucet: boolean;
 }): XrplFundingStrategy {
   const xrp = Number.parseFloat(input.xrpBalance);
   const hasPositiveXrp = Number.isFinite(xrp) && xrp > 0;
@@ -26,11 +28,6 @@ export function decideXrplFundingStrategy(input: {
   if (!input.accountExists || !hasPositiveXrp) {
     return "xrp";
   }
-
-  if (!input.hasMockRlusdFaucet || !input.trustlinePresent) {
-    return "error";
-  }
-
   return "rlusd";
 }
 
@@ -68,41 +65,6 @@ export function registerFaucetCommand(program: Command): void {
         await disconnectXrplClient().catch(() => {});
       }
     });
-
-  faucetCmd
-    .command("rlusd")
-    .description("Request mock RLUSD from a configured XRPL mock faucet")
-    .option("--address <address>", "recipient XRPL address (defaults to current wallet)")
-    .option("--amount <amount>", "requested RLUSD amount")
-    .action(async (opts) => {
-      const config = loadConfig();
-      const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
-      const address = opts.address || getDefaultWallet("xrpl")?.address;
-
-      if (!address) {
-        logger.error("No XRPL wallet configured. Use --address or configure an XRPL wallet first.");
-        process.exitCode = 1;
-        return;
-      }
-
-      if (!config.faucet?.rlusd_mock_url) {
-        logger.error("No mock RLUSD faucet URL configured.");
-        logger.dim(
-          "Set one with: rlusd config set --mock-rlusd-faucet-url http://host:port/fund",
-        );
-        process.exitCode = 1;
-        return;
-      }
-
-      try {
-        await requestMockRlusd(address, opts.amount, outputFormat, config);
-      } catch (err) {
-        logger.error(`Mock RLUSD faucet request failed: ${(err as Error).message}`);
-        process.exitCode = 1;
-      } finally {
-        await disconnectXrplClient().catch(() => {});
-      }
-    });
 }
 
 async function fundXrpl(
@@ -134,34 +96,15 @@ async function fundXrpl(
         })()
       : "0";
 
-  const trustlineStatus = accountExists
-    ? await getXrplTrustlineStatus(network, address)
-    : { present: false, account_exists: false };
-
   const strategy = decideXrplFundingStrategy({
     accountExists,
     xrpBalance,
-    trustlinePresent: Boolean(trustlineStatus.present),
-    hasMockRlusdFaucet: Boolean(config.faucet?.rlusd_mock_url),
   });
 
   if (strategy === "rlusd") {
-    logger.info(
-      `XRPL account ${address} is already activated with ${xrpBalance} XRP. Requesting mock RLUSD instead...`,
-    );
-    await requestMockRlusd(address, undefined, outputFormat, config);
+    logger.info(`XRPL account ${address} is already activated with ${xrpBalance} XRP.`);
+    emitRlusdFaucetGuidance(address, outputFormat);
     return;
-  }
-
-  if (strategy === "error") {
-    if (!config.faucet?.rlusd_mock_url) {
-      throw new Error(
-        "XRPL account already has XRP, but no mock RLUSD faucet is configured. Set one with: rlusd config set --mock-rlusd-faucet-url http://host:port/fund",
-      );
-    }
-    throw new Error(
-      "XRPL account already has XRP, but no RLUSD trust line is present. Run: rlusd xrpl trustline setup",
-    );
   }
 
   const faucetUrl =
@@ -210,41 +153,54 @@ async function fundXrpl(
     logger.raw(formatOutput(result, outputFormat));
   } else {
     logger.success(`Funded ${fundedAddress} with ${amount} XRP`);
-    logger.dim("Note: This faucet provides XRP only, not RLUSD.");
-    logger.dim("To receive RLUSD, first set up a trust line: rlusd xrpl trustline setup");
+    logger.dim("This faucet provides XRP only.");
+    logger.dim("After your XRPL account is activated, use the official RLUSD faucet: https://tryrlusd.com/");
   }
 }
 
-async function requestMockRlusd(
+function emitRlusdFaucetGuidance(
   address: string,
-  amount: string | undefined,
   outputFormat: OutputFormat,
-  config: AppConfig,
-): Promise<void> {
-  if (!config.faucet?.rlusd_mock_url) {
-    throw new Error("No mock RLUSD faucet URL configured.");
-  }
+): void {
+  const payload = {
+    chain: "xrpl",
+    address,
+    action: "claim_rlusd",
+    faucet_url: RLUSD_PUBLIC_TESTNET_FAUCET_URL,
+    note: "Your XRPL account already has XRP. Open the official RLUSD faucet and claim testnet RLUSD there.",
+  };
 
-  const response = await fetch(config.faucet.rlusd_mock_url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      address,
-      ...(amount ? { amount } : {}),
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Mock RLUSD faucet returned ${response.status}: ${text}`);
-  }
-
-  const data = (await response.json()) as Record<string, unknown>;
   if (outputFormat === "json" || outputFormat === "json-compact") {
-    logger.raw(formatOutput(data, outputFormat));
+    logger.raw(formatOutput(payload, outputFormat));
   } else {
-    logger.success("Mock RLUSD faucet request completed");
-    logger.raw(formatOutput(data, "table"));
+    logger.success("XRPL account is already funded with XRP");
+    logger.label("Address", address);
+    logger.label("Official RLUSD Faucet", RLUSD_PUBLIC_TESTNET_FAUCET_URL);
+    logger.dim(
+      "Use the official faucet above to claim testnet RLUSD for this XRPL account.",
+    );
+  }
+
+  openInBrowserBestEffort(RLUSD_PUBLIC_TESTNET_FAUCET_URL);
+}
+
+function openInBrowserBestEffort(url: string): void {
+  try {
+    const command =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "cmd"
+          : "xdg-open";
+    const args =
+      process.platform === "win32" ? ["/c", "start", "", url] : [url];
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } catch {
+    // Best effort only: still print the URL even if opening a browser fails.
   }
 }
 

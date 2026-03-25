@@ -21,8 +21,6 @@ const {
   setChainRpc,
   setDefaultChain,
   setOutputFormat,
-  setMockRlusdFaucetUrl,
-  setRlusdXrplAsset,
   getConfigDir,
   getConfigPath,
   getWalletsDir,
@@ -35,6 +33,7 @@ const { getPreparePolicy } = await import("../../src/policy/index.js");
 
 const {
   RLUSD_XRPL_ISSUER,
+  RLUSD_XRPL_ISSUER_TESTNET,
   RLUSD_ETH_CONTRACT,
 } = await import("../../src/config/constants.js");
 
@@ -80,7 +79,7 @@ describe("Config System", () => {
       expect(config.environment).toBe("testnet");
       expect(config.default_chain).toBe("xrpl");
       expect(config.output_format).toBe("table");
-      expect(config.rlusd.xrpl_issuer).toBe(RLUSD_XRPL_ISSUER);
+      expect(config.rlusd.xrpl_issuer).toBe(RLUSD_XRPL_ISSUER_TESTNET);
       expect(config.rlusd.eth_contract).toBe(RLUSD_ETH_CONTRACT);
     });
 
@@ -267,25 +266,6 @@ describe("Config System", () => {
     });
   });
 
-  describe("setRlusdXrplAsset", () => {
-    it("should override issuer and currency", () => {
-      loadConfig();
-      const config = setRlusdXrplAsset({
-        issuer: "rTESTISSUER123456789012345678901234",
-        currency: "524C555344000000000000000000000000000000",
-      });
-      expect(config.rlusd.xrpl_issuer).toBe("rTESTISSUER123456789012345678901234");
-      expect(config.rlusd.xrpl_currency).toBe("524C555344000000000000000000000000000000");
-    });
-  });
-
-  describe("setMockRlusdFaucetUrl", () => {
-    it("should set the mock faucet URL", () => {
-      loadConfig();
-      const config = setMockRlusdFaucetUrl("http://localhost:8787/fund");
-      expect(config.faucet?.rlusd_mock_url).toBe("http://localhost:8787/fund");
-    });
-  });
 });
 
 describe("Network Presets", () => {
