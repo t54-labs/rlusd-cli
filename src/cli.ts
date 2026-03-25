@@ -16,6 +16,7 @@ import { registerDefiCommand } from "./commands/eth/defi.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
 import { beginAgentCapture, endAgentCapture, isAgentCaptureActive } from "./agent/envelope.js";
+import { loadConfig } from "./config/config.js";
 import { logger } from "./utils/logger.js";
 import packageJson from "../package.json";
 
@@ -31,6 +32,15 @@ function getCommandPath(actionCommand: Command): string {
   }
 
   return segments.join(" ");
+}
+
+function getEnvelopeChainLabel(chain: string, network: string): string {
+  if (chain === "xrpl") {
+    return `xrpl-${network}`;
+  }
+
+  const networkSuffix = network === "mainnet" ? "mainnet" : "sepolia";
+  return `${chain}-${networkSuffix}`;
 }
 
 export function createProgram(): Command {
@@ -55,11 +65,17 @@ export function createProgram(): Command {
   program.hook("preAction", (thisCommand, actionCommand) => {
     const opts = actionCommand.optsWithGlobals();
     const machineJson = Boolean(opts.json);
+    const config = loadConfig();
+    const resolvedChain = (opts.chain || config.default_chain) as string;
+    const resolvedNetwork =
+      opts.network && ["mainnet", "testnet", "devnet"].includes(opts.network)
+        ? opts.network
+        : config.environment;
 
     if (machineJson) {
       thisCommand.setOptionValueWithSource("output", "json", "implied");
       actionCommand.setOptionValueWithSource("output", "json", "implied");
-      beginAgentCapture(getCommandPath(actionCommand));
+      beginAgentCapture(getCommandPath(actionCommand), getEnvelopeChainLabel(resolvedChain, resolvedNetwork));
     }
 
     if (opts.network && !["mainnet", "testnet", "devnet"].includes(opts.network)) {

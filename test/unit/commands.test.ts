@@ -138,14 +138,15 @@ describe("Agent JSON Contract", () => {
   it("should emit a shared success envelope with --json", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--json", "config", "get"], { from: "user" });
+    program.parse(["--json", "--chain", "xrpl", "--network", "mainnet", "config", "get"], { from: "user" });
 
     expect(stderr).toEqual([]);
     const envelope = JSON.parse(stdout.join("\n"));
     expect(envelope.ok).toBe(true);
     expect(envelope.command).toBe("config get");
+    expect(envelope.chain).toBe("xrpl-mainnet");
     expect(envelope.timestamp).toEqual(expect.any(String));
-    expect(envelope.data.environment).toBe("testnet");
+    expect(envelope.data.environment).toBe("mainnet");
     expect(envelope.data.rlusd).toBeDefined();
     expect(envelope.warnings).toEqual([]);
     expect(envelope.next).toEqual([]);
@@ -154,15 +155,17 @@ describe("Agent JSON Contract", () => {
   it("should emit structured JSON errors to stderr with --json", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--json", "config", "set", "--network", "invalid"], { from: "user" });
+    program.parse(["--json", "--chain", "xrpl", "config", "set", "--network", "invalid"], { from: "user" });
 
     expect(stdout).toEqual([]);
     const envelope = JSON.parse(stderr.join("\n"));
     expect(envelope.ok).toBe(false);
     expect(envelope.command).toBe("config set");
+    expect(envelope.chain).toBe("xrpl-testnet");
     expect(envelope.timestamp).toEqual(expect.any(String));
     expect(envelope.error.code).toEqual(expect.any(String));
     expect(envelope.error.message).toContain("Invalid network");
+    expect(envelope.error.retryable).toBe(false);
   });
 });
 

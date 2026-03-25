@@ -7,6 +7,7 @@ type ConsoleTable = typeof console.table;
 
 interface AgentCaptureState {
   command: string;
+  chain?: string;
   stdout: string[];
   stderr: string[];
   originalLog: ConsoleLog;
@@ -32,15 +33,62 @@ function tryParseJson(raw: string): unknown {
   }
 }
 
-function createNextSteps(): AgentNextStep[] {
-  return [];
+function normalizeNextSteps(next: Array<{ command: string }>): AgentNextStep[] {
+  return next.map((step) => ({ command: step.command }));
 }
 
-export function beginAgentCapture(command: string): void {
+export function createSuccessEnvelope<TData>(input: {
+  command: string;
+  chain?: string;
+  timestamp: string;
+  data: TData;
+  warnings?: string[];
+  next?: Array<{ command: string }>;
+}): AgentSuccessEnvelope<TData> {
+  return {
+    ok: true,
+    command: input.command,
+    chain: input.chain,
+    timestamp: input.timestamp,
+    data: input.data,
+    warnings: input.warnings ?? [],
+    next: normalizeNextSteps(input.next ?? []),
+  };
+}
+
+export function createErrorEnvelope(input: {
+  command: string;
+  chain?: string;
+  timestamp: string;
+  code: string;
+  message: string;
+  retryable?: boolean;
+  warnings?: string[];
+  next?: Array<{ command: string }>;
+  details?: Record<string, unknown>;
+}): AgentErrorEnvelope {
+  return {
+    ok: false,
+    command: input.command,
+    chain: input.chain,
+    timestamp: input.timestamp,
+    error: {
+      code: input.code,
+      message: input.message,
+      retryable: input.retryable ?? false,
+      details: input.details,
+    },
+    warnings: input.warnings ?? [],
+    next: normalizeNextSteps(input.next ?? []),
+  };
+}
+
+export function beginAgentCapture(command: string, chain?: string): void {
   if (captureState) return;
 
   captureState = {
     command,
+    chain,
     stdout: [],
     stderr: [],
     originalLog: console.log.bind(console),
@@ -75,31 +123,25 @@ export function endAgentCapture(): void {
 
   if (state.stderr.length > 0 || process.exitCode) {
     const message = state.stderr.join("\n").trim() || "Command failed";
-    const envelope: AgentErrorEnvelope = {
-      ok: false,
+    const envelope = createErrorEnvelope({
       command: state.command,
+      chain: state.chain,
       timestamp,
-      error: {
-        code: inferAgentErrorCode(message),
-        message,
-      },
-      warnings: [],
-      next: createNextSteps(),
-    };
+      code: inferAgentErrorCode(message),
+      message,
+    });
 
     state.originalError(stringifyEnvelope(envelope));
     return;
   }
 
   const rawOutput = state.stdout.join("\n").trim();
-  const envelope: AgentSuccessEnvelope = {
-    ok: true,
+  const envelope = createSuccessEnvelope({
     command: state.command,
+    chain: state.chain,
     timestamp,
     data: rawOutput ? tryParseJson(rawOutput) : null,
-    warnings: [],
-    next: createNextSteps(),
-  };
+  });
 
   state.originalLog(stringifyEnvelope(envelope));
 }

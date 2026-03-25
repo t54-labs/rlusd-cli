@@ -1,17 +1,18 @@
 export interface AgentNextStep {
-  type: string;
-  description: string;
+  command: string;
 }
 
 export interface AgentErrorPayload {
   code: string;
   message: string;
+  retryable: boolean;
   details?: Record<string, unknown>;
 }
 
 export interface AgentSuccessEnvelope<TData = unknown> {
   ok: true;
   command: string;
+  chain?: string;
   timestamp: string;
   data: TData;
   warnings: string[];
@@ -21,6 +22,7 @@ export interface AgentSuccessEnvelope<TData = unknown> {
 export interface AgentErrorEnvelope {
   ok: false;
   command: string;
+  chain?: string;
   timestamp: string;
   error: AgentErrorPayload;
   warnings: string[];
