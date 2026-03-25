@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ensureConfigDir, getWalletsDir, loadConfig, saveConfig } from "../config/config.js";
-import type { StoredWallet, StoredXrplWallet, StoredEvmWallet, ChainName } from "../types/index.js";
+import type { StoredWallet, StoredXrplWallet, StoredEvmWallet, ChainName, WalletOptionName } from "../types/index.js";
 
 const WALLET_NAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
@@ -71,11 +71,9 @@ export function setDefaultWallet(chain: ChainName, walletName: string): void {
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' does not exist.`);
   }
-  const walletIsXrpl = wallet.chain === "xrpl";
-  const targetIsXrpl = chain === "xrpl";
-  if (walletIsXrpl !== targetIsXrpl) {
+  if (wallet.chain !== chain) {
     throw new Error(
-      `Wallet '${walletName}' is a ${wallet.chain} wallet and cannot be used as default for ${chain}.`,
+      `Wallet '${walletName}' is configured for ${wallet.chain} and cannot be used as default for ${chain}.`,
     );
   }
   const config = loadConfig();
@@ -92,4 +90,36 @@ export function isXrplWallet(wallet: StoredWallet): wallet is StoredXrplWallet {
 
 export function isEvmWallet(wallet: StoredWallet): wallet is StoredEvmWallet {
   return wallet.chain !== "xrpl";
+}
+
+function assertWalletMatchesChain(wallet: StoredWallet, chain: ChainName, optionName: WalletOptionName): void {
+  if (wallet.chain !== chain) {
+    throw new Error(
+      `Wallet '${wallet.name}' is configured for ${wallet.chain}, not ${chain}. Use ${optionName} with a ${chain} wallet.`,
+    );
+  }
+}
+
+export function resolveWalletForChain(
+  chain: ChainName,
+  input?: { walletName?: string; optionName?: WalletOptionName },
+): StoredWallet {
+  const optionName = input?.optionName ?? "--wallet";
+
+  if (input?.walletName) {
+    const wallet = loadWallet(input.walletName);
+    if (!wallet) {
+      throw new Error(`Wallet '${input.walletName}' does not exist.`);
+    }
+    assertWalletMatchesChain(wallet, chain, optionName);
+    return wallet;
+  }
+
+  const wallet = getDefaultWallet(chain);
+  if (!wallet) {
+    throw new Error(`No wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
+  }
+
+  assertWalletMatchesChain(wallet, chain, optionName);
+  return wallet;
 }

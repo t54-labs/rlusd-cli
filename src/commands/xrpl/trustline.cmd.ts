@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import type { TrustSet } from "xrpl";
 import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
-import { getDefaultWallet } from "../../wallet/manager.js";
+import { getDefaultWallet, resolveWalletForChain } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
 import { loadConfig } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
@@ -17,6 +17,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
     .command("setup")
     .description("Set up RLUSD trust line (required before receiving RLUSD on XRPL)")
     .option("--limit <amount>", "maximum RLUSD to hold", "1000000")
+    .option("--wallet <name>", "wallet name to use for the trust line")
     .option(
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()})`,
@@ -24,14 +25,15 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
     .action(async (opts) => {
       try {
         const config = loadConfig();
-        const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
-        if (!walletData) {
-          logger.error("No XRPL wallet configured. Run: rlusd wallet generate --chain xrpl");
-          process.exitCode = 1;
-          return;
-        }
+        const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+        const walletData = resolveWalletForChain("xrpl", {
+          walletName: opts.wallet,
+          optionName: "--wallet",
+        }) as StoredXrplWallet;
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 
@@ -140,6 +142,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
   trustlineCmd
     .command("remove")
     .description("Remove RLUSD trust line (requires zero balance)")
+    .option("--wallet <name>", "wallet name to use for the trust line")
     .option(
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()})`,
@@ -147,14 +150,15 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
     .action(async (opts) => {
       try {
         const config = loadConfig();
-        const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
-        if (!walletData) {
-          logger.error("No XRPL wallet configured.");
-          process.exitCode = 1;
-          return;
-        }
+        const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+        const walletData = resolveWalletForChain("xrpl", {
+          walletName: opts.wallet,
+          optionName: "--wallet",
+        }) as StoredXrplWallet;
 
-        const password = resolveWalletPassword(opts.password);
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+        });
         const wallet = restoreXrplWallet(walletData, password);
         const client = await getXrplClient();
 

@@ -13,6 +13,9 @@ vi.mock("node:os", async () => {
 const { createProgram } = await import("../../src/cli.js");
 const { ensureConfigDir, getPlansDir } = await import("../../src/config/config.js");
 const { createPlanId, createPreparedPlan, loadPreparedPlan } = await import("../../src/plans/index.js");
+const { saveWallet } = await import("../../src/wallet/manager.js");
+const { generateXrplWallet, serializeXrplWallet } = await import("../../src/wallet/xrpl-wallet.js");
+const { generateEvmWallet, serializeEvmWallet } = await import("../../src/wallet/evm-wallet.js");
 
 describe("Command Registration", () => {
   beforeEach(() => {
@@ -49,6 +52,10 @@ describe("Command Registration", () => {
     expect(subcommands).toContain("setup");
     expect(subcommands).toContain("status");
     expect(subcommands).toContain("remove");
+
+    const setupCmd = trustlineCmd!.commands.find((c) => c.name() === "setup");
+    const setupOptionNames = setupCmd!.options.map((o) => o.long);
+    expect(setupOptionNames).toContain("--wallet");
   });
 
   it("should register send command with required options", () => {
@@ -59,6 +66,7 @@ describe("Command Registration", () => {
     const optionNames = sendCmd!.options.map((o) => o.long);
     expect(optionNames).toContain("--to");
     expect(optionNames).toContain("--amount");
+    expect(optionNames).toContain("--from-wallet");
     expect(optionNames).toContain("--tag");
     expect(optionNames).toContain("--memo");
     expect(optionNames).toContain("--dry-run");
@@ -167,6 +175,60 @@ describe("Agent JSON Contract", () => {
     expect(envelope.error.code).toEqual(expect.any(String));
     expect(envelope.error.message).toContain("Invalid network");
     expect(envelope.error.retryable).toBe(false);
+  });
+
+  it("should emit JSON errors for wrong-chain wallet selections", async () => {
+    saveWallet(serializeXrplWallet("xrpl-only", generateXrplWallet(), "p"));
+
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "--chain",
+        "ethereum",
+        "send",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "1",
+        "--from-wallet",
+        "xrpl-only",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain("configured for xrpl, not ethereum");
+  });
+
+  it("should emit JSON errors when wallet passwords are missing in machine mode", async () => {
+    saveWallet(serializeEvmWallet("eth-ops", generateEvmWallet(), "p", "ethereum"));
+
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "--chain",
+        "ethereum",
+        "send",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "1",
+        "--from-wallet",
+        "eth-ops",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.message).toContain("Wallet password is required");
   });
 });
 
@@ -444,6 +506,10 @@ describe("Ethereum Command Registration", () => {
     expect(subcommands).toContain("approve");
     expect(subcommands).toContain("allowance");
     expect(subcommands).toContain("revoke");
+
+    const approveCmd = ethCmd!.commands.find((c) => c.name() === "approve");
+    const approveOptionNames = approveCmd!.options.map((o) => o.long);
+    expect(approveOptionNames).toContain("--owner-wallet");
   });
 
   it("should register eth defi aave subcommands", () => {

@@ -143,3 +143,5 @@ export interface LoadedPreparedPlan<
   warnings: string[];
   next: Array<{ command: string }>;
 }
+
+export type WalletOptionName = "--wallet" | "--from-wallet" | "--owner-wallet";

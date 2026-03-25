@@ -33,6 +33,7 @@ const {
   listWalletsByChain,
   setDefaultWallet,
   getDefaultWallet,
+  resolveWalletForChain,
 } = await import("../../src/wallet/manager.js");
 const { ensureConfigDir } = await import("../../src/config/config.js");
 
@@ -237,5 +238,28 @@ describe("Wallet Manager", () => {
   it("should reject setting an EVM wallet as default for XRPL", () => {
     saveWallet(serializeEvmWallet("evm-only", generateEvmWallet(), "p"));
     expect(() => setDefaultWallet("xrpl", "evm-only")).toThrow("cannot be used");
+  });
+
+  it("should resolve an explicitly selected wallet for the exact chain", () => {
+    saveWallet(serializeEvmWallet("eth-ops", generateEvmWallet(), "p", "ethereum"));
+
+    const wallet = resolveWalletForChain("ethereum", {
+      walletName: "eth-ops",
+      optionName: "--from-wallet",
+    });
+
+    expect(wallet.name).toBe("eth-ops");
+    expect(wallet.chain).toBe("ethereum");
+  });
+
+  it("should reject explicitly selected wallets configured for the wrong chain", () => {
+    saveWallet(serializeEvmWallet("base-ops", generateEvmWallet(), "p", "base"));
+
+    expect(() =>
+      resolveWalletForChain("ethereum", {
+        walletName: "base-ops",
+        optionName: "--owner-wallet",
+      }),
+    ).toThrow("configured for base, not ethereum");
   });
 });

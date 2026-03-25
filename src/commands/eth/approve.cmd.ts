@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "viem/chains";
 import type { Chain } from "viem";
 import { loadConfig } from "../../config/config.js";
-import { getDefaultWallet, isXrplWallet } from "../../wallet/manager.js";
+import { isXrplWallet, resolveWalletForChain } from "../../wallet/manager.js";
 import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
 import { getEvmPublicClient } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
@@ -57,11 +57,12 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .requiredOption("--spender <address>", "spender contract or wallet address")
     .requiredOption("--amount <n>", "allowance amount in RLUSD (token units)")
     .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option("--owner-wallet <name>", "wallet name to use as the RLUSD owner")
     .option(
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()})`,
     )
-    .action(async (opts: { spender: string; amount: string; chain?: string; password?: string }) => {
+    .action(async (opts: { spender: string; amount: string; chain?: string; ownerWallet?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       try {
@@ -71,7 +72,7 @@ export function registerApproveCommand(parent: Command, program: Command): void 
           process.exitCode = 1;
           return;
         }
-        await runApprove(chain, opts.spender, opts.amount, opts.password, config, outputFormat);
+        await runApprove(chain, opts.spender, opts.amount, opts.ownerWallet, opts.password, config, outputFormat);
       } catch (err) {
         logger.error(`Approve failed: ${(err as Error).message}`);
         process.exitCode = 1;
@@ -83,11 +84,12 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .description("Check RLUSD allowance for a spender")
     .requiredOption("--spender <address>", "spender address")
     .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option("--owner-wallet <name>", "wallet name to use as the RLUSD owner")
     .option(
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()}; only used to resolve the active wallet)`,
     )
-    .action(async (opts: { spender: string; chain?: string; password?: string }) => {
+    .action(async (opts: { spender: string; chain?: string; ownerWallet?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       try {
@@ -97,7 +99,7 @@ export function registerApproveCommand(parent: Command, program: Command): void 
           process.exitCode = 1;
           return;
         }
-        await runAllowance(chain, opts.spender, config, outputFormat);
+        await runAllowance(chain, opts.spender, opts.ownerWallet, config, outputFormat);
       } catch (err) {
         logger.error(`Allowance query failed: ${(err as Error).message}`);
         process.exitCode = 1;
@@ -109,11 +111,12 @@ export function registerApproveCommand(parent: Command, program: Command): void 
     .description("Revoke RLUSD approval (set allowance to 0)")
     .requiredOption("--spender <address>", "spender address to revoke")
     .option("-c, --chain <chain>", "EVM chain: ethereum")
+    .option("--owner-wallet <name>", "wallet name to use as the RLUSD owner")
     .option(
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()})`,
     )
-    .action(async (opts: { spender: string; chain?: string; password?: string }) => {
+    .action(async (opts: { spender: string; chain?: string; ownerWallet?: string; password?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       try {
@@ -123,7 +126,7 @@ export function registerApproveCommand(parent: Command, program: Command): void 
           process.exitCode = 1;
           return;
         }
-        await runApprove(chain, opts.spender, "0", opts.password, config, outputFormat);
+        await runApprove(chain, opts.spender, "0", opts.ownerWallet, opts.password, config, outputFormat);
       } catch (err) {
         logger.error(`Revoke failed: ${(err as Error).message}`);
         process.exitCode = 1;
@@ -135,18 +138,22 @@ async function runApprove(
   chain: EvmChainName,
   spender: string,
   amountStr: string,
+  ownerWallet: string | undefined,
   password: string | undefined,
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  const walletData = getDefaultWallet(chain);
-  if (!walletData || isXrplWallet(walletData)) {
-    logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
-    process.exitCode = 1;
-    return;
+  const walletData = resolveWalletForChain(chain, {
+    walletName: ownerWallet,
+    optionName: "--owner-wallet",
+  });
+  if (isXrplWallet(walletData)) {
+    throw new Error(`Selected wallet is not an EVM wallet for ${chain}.`);
   }
 
-  const pwd = resolveWalletPassword(password);
+  const pwd = resolveWalletPassword(password, {
+    machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+  });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
 
   const rpcUrl = config.chains[chain]?.rpc;
@@ -206,14 +213,16 @@ async function runApprove(
 async function runAllowance(
   chain: EvmChainName,
   spender: string,
+  ownerWallet: string | undefined,
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  const walletData = getDefaultWallet(chain);
-  if (!walletData || isXrplWallet(walletData)) {
-    logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
-    process.exitCode = 1;
-    return;
+  const walletData = resolveWalletForChain(chain, {
+    walletName: ownerWallet,
+    optionName: "--owner-wallet",
+  });
+  if (isXrplWallet(walletData)) {
+    throw new Error(`Selected wallet is not an EVM wallet for ${chain}.`);
   }
 
   const owner = walletData.address as `0x${string}`;

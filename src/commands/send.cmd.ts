@@ -2,7 +2,7 @@ import { Command } from "commander";
 import type { Payment } from "xrpl";
 import { getXrplClient, disconnectXrplClient } from "../clients/xrpl-client.js";
 import { getEvmPublicClient } from "../clients/evm-client.js";
-import { getDefaultWallet, isXrplWallet } from "../wallet/manager.js";
+import { isXrplWallet, resolveWalletForChain } from "../wallet/manager.js";
 import { restoreXrplWallet } from "../wallet/xrpl-wallet.js";
 import { decryptEvmPrivateKey } from "../wallet/evm-wallet.js";
 import { loadConfig } from "../config/config.js";
@@ -44,6 +44,7 @@ export function registerSendCommand(program: Command): void {
     .requiredOption("--to <address>", "recipient address")
     .requiredOption("--amount <amount>", "amount of RLUSD to send")
     .option("-c, --chain <chain>", "chain to send on (auto-detected from address if omitted)")
+    .option("--from-wallet <name>", "wallet name to send from")
     .option("--tag <tag>", "XRPL destination tag (integer)")
     .option("--memo <memo>", "transaction memo")
     .option(
@@ -96,18 +97,29 @@ export function registerSendCommand(program: Command): void {
 }
 
 async function sendXrpl(
-  opts: { to: string; amount: string; tag?: string; memo?: string; password?: string; dryRun?: boolean },
+  opts: {
+    to: string;
+    amount: string;
+    fromWallet?: string;
+    tag?: string;
+    memo?: string;
+    password?: string;
+    dryRun?: boolean;
+  },
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  const walletData = getDefaultWallet("xrpl");
-  if (!walletData || !isXrplWallet(walletData)) {
-    logger.error("No XRPL wallet configured. Run: rlusd wallet generate --chain xrpl");
-    process.exitCode = 1;
-    return;
+  const walletData = resolveWalletForChain("xrpl", {
+    walletName: opts.fromWallet,
+    optionName: "--from-wallet",
+  });
+  if (!isXrplWallet(walletData)) {
+    throw new Error("Selected wallet is not an XRPL wallet.");
   }
 
-  const password = resolveWalletPassword(opts.password);
+  const password = resolveWalletPassword(opts.password, {
+    machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+  });
   const wallet = restoreXrplWallet(walletData as StoredXrplWallet, password);
   const client = await getXrplClient();
 
@@ -184,19 +196,22 @@ async function sendXrpl(
 
 async function sendEvm(
   chain: EvmChainName,
-  opts: { to: string; amount: string; password?: string; dryRun?: boolean },
+  opts: { to: string; amount: string; fromWallet?: string; password?: string; dryRun?: boolean },
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
   assertActiveRlusdEvmChain(chain);
-  const walletData = getDefaultWallet(chain);
-  if (!walletData || isXrplWallet(walletData)) {
-    logger.error(`No EVM wallet configured for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
-    process.exitCode = 1;
-    return;
+  const walletData = resolveWalletForChain(chain, {
+    walletName: opts.fromWallet,
+    optionName: "--from-wallet",
+  });
+  if (isXrplWallet(walletData)) {
+    throw new Error(`Selected wallet is not an EVM wallet for ${chain}.`);
   }
 
-  const password = resolveWalletPassword(opts.password);
+  const password = resolveWalletPassword(opts.password, {
+    machineReadable: outputFormat === "json" || outputFormat === "json-compact",
+  });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
 
   const rpcUrl = config.chains[chain]?.rpc;
