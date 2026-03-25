@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/@rlusd/cli.svg)](https://www.npmjs.com/package/@rlusd/cli)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](docs/CONTRIBUTING.md)
 
-A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin operations across **XRP Ledger**, **Ethereum**, and **Ethereum L2 networks**.
+A command-line interface for **Ripple USD (RLUSD)** operations across **XRP Ledger** and **Ethereum**, with planned support for additional Ethereum L2 networks.
 
 ## Features
 
@@ -16,7 +16,7 @@ A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin opera
 - **DEX trading on both chains** — XRPL native DEX order book + Uniswap V3 swaps on Ethereum
 - **AMM liquidity** — Deposit, withdraw, and vote on XRPL AMM pools
 - **Aave lending** — Supply/borrow RLUSD on Aave V3
-- **Cross-chain bridging** — Transfer RLUSD between Ethereum and L2s via Wormhole NTT
+- **Bridge-ready workflow** — Includes a professional Wormhole NTT bridge stub with clear status and limitations
 - **Price oracle** — Real-time RLUSD pricing from Chainlink and XRPL DEX
 - **Script-friendly** — JSON output mode for automation and CI/CD pipelines
 - **Secure key storage** — AES-256-GCM encrypted wallet files with PBKDF2 key derivation
@@ -27,10 +27,10 @@ A multi-chain command-line interface for **Ripple USD (RLUSD)** stablecoin opera
 |-------|--------|------|
 | XRP Ledger | Live | L1 |
 | Ethereum | Live | L1 |
-| Base | Coming Soon | L2 |
-| Optimism | Coming Soon | L2 |
-| Ink | Coming Soon | L2 |
-| Unichain | Coming Soon | L2 |
+| Base | Planned | L2 |
+| Optimism | Planned | L2 |
+| Ink | Planned | L2 |
+| Unichain | Planned | L2 |
 
 ## Installation
 
@@ -63,20 +63,21 @@ npm link
 rlusd config set --network testnet
 
 # 2. Generate wallets for both chains
-rlusd wallet generate --chain xrpl --name my-xrpl --password mypassword
-rlusd wallet generate --chain ethereum --name my-eth --password mypassword
+export RLUSD_WALLET_PASSWORD=mypassword
+rlusd wallet generate --chain xrpl --name my-xrpl
+rlusd wallet generate --chain ethereum --name my-eth
 
 # 3. Fund your XRPL wallet from the testnet faucet
 rlusd faucet fund --chain xrpl
 
 # 4. Set up RLUSD trust line on XRPL (required before receiving RLUSD)
-rlusd xrpl trustline setup --password mypassword
+rlusd xrpl trustline setup
 
 # 5. Check balances across all chains
 rlusd balance --all
 
 # 6. Send RLUSD to someone
-rlusd send --to rDestination... --amount 100 --password mypassword
+rlusd send --to rDestination... --amount 100
 
 # 7. Check RLUSD price
 rlusd price
@@ -94,10 +95,12 @@ Every command supports these flags:
 |------|-------------|---------|
 | `--chain <chain>` | Target chain: `xrpl`, `ethereum`, `base`, `optimism`, `ink`, `unichain` | Per-command or from config |
 | `--output <format>` | Output format: `table`, `json`, `json-compact` | `table` |
-| `--network <network>` | Override network: `mainnet`, `testnet`, `devnet` | From config |
-| `--verbose` | Show detailed output | off |
+| `--network <network>` | Runtime-only network override for the current command (`mainnet`, `testnet`, `devnet`) | From config |
+| `--verbose` | Enable debug output for the current command | off |
 | `--version` | Print version | — |
 | `--help` | Print help | — |
+
+> **Security note**: for commands that require wallet decryption, prefer setting `RLUSD_WALLET_PASSWORD` instead of passing `--password` directly on the command line.
 
 ---
 
@@ -435,9 +438,11 @@ rlusd eth revoke --spender 0xContractAddr... --password s3cret
 
 ### `rlusd eth swap` — Uniswap V3 Token Swaps
 
-Swap RLUSD for other tokens (or buy RLUSD with other tokens) via Uniswap V3 on Ethereum.
+Swap RLUSD for other tokens (or buy RLUSD with other tokens) via Uniswap V3 on **Ethereum**.
 
-**Supported tokens**: WETH, USDC, USDT, DAI, WBTC, or any ERC-20 by contract address.
+> **Current scope**: RLUSD swap is intentionally limited to `--chain ethereum` until verified RLUSD, oracle, and router addresses are available for additional EVM chains.
+
+**Supported tokens**: `WETH`, `USDC`, `USDT`, `DAI`, `WBTC`, `RLUSD`.
 
 #### `rlusd eth swap sell`
 
@@ -445,10 +450,11 @@ Sell RLUSD for another token.
 
 ```bash
 # Sell 500 RLUSD for USDC
-rlusd eth swap sell --amount 500 --for USDC --password s3cret
+export RLUSD_WALLET_PASSWORD=s3cret
+rlusd eth swap sell --amount 500 --for USDC
 
 # Sell with custom slippage and fee tier
-rlusd eth swap sell --amount 100 --for WETH --slippage 100 --fee-tier 3000 --password s3cret
+rlusd eth swap sell --amount 100 --for WETH --slippage 100 --fee-tier 3000
 
 # Preview without executing
 rlusd eth swap sell --amount 500 --for USDC --dry-run
@@ -457,11 +463,15 @@ rlusd eth swap sell --amount 500 --for USDC --dry-run
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--amount <n>` | **(required)** RLUSD amount to sell | — |
-| `--for <token>` | **(required)** Token to receive (`USDC`, `WETH`, `0x...`) | — |
+| `--for <token>` | **(required)** Token to receive (`USDC`, `USDT`, `WETH`, `DAI`, `WBTC`) | — |
 | `--slippage <bps>` | Max slippage in basis points | `50` (0.5%) |
 | `--fee-tier <fee>` | Uniswap pool fee: `100`, `500`, `3000`, `10000` | `3000` (0.3%) |
-| `--password <pwd>` | Wallet decryption password | — |
+| `--password <pwd>` | Wallet decryption password (prefer `RLUSD_WALLET_PASSWORD`) | — |
 | `--dry-run` | Preview without submitting | off |
+
+The CLI now applies real quote-based protections:
+- `sell` computes `amountOutMinimum` from the Uniswap Quoter and your `--slippage`
+- `buy` computes `amountInMaximum` from the Uniswap Quoter and your `--slippage`
 
 #### `rlusd eth swap buy`
 
@@ -469,10 +479,10 @@ Buy RLUSD with another token.
 
 ```bash
 # Buy 1000 RLUSD, paying with USDC
-rlusd eth swap buy --amount 1000 --with USDC --password s3cret
+rlusd eth swap buy --amount 1000 --with USDC
 
 # Buy RLUSD with WETH
-rlusd eth swap buy --amount 500 --with WETH --password s3cret
+rlusd eth swap buy --amount 500 --with WETH
 ```
 
 #### `rlusd eth swap quote`
@@ -561,6 +571,8 @@ rlusd price --source dex
 rlusd price --output json
 ```
 
+`price --source chainlink` currently reads the RLUSD/USD oracle on **Ethereum** only.
+
 ---
 
 ### `rlusd market` — Market Overview
@@ -587,7 +599,7 @@ rlusd tx status 0xabc123... --chain ethereum
 
 #### `rlusd tx history`
 
-Show recent RLUSD transactions for the current wallet.
+Show recent RLUSD transactions for the current wallet. For EVM chains, RLUSD history is currently supported on **Ethereum** only.
 
 ```bash
 rlusd tx history                          # default chain, last 20
@@ -613,9 +625,14 @@ rlusd faucet fund --chain ethereum
 
 ### `rlusd bridge` — Cross-Chain Bridge (Wormhole NTT)
 
-Transfer RLUSD between Ethereum and L2 networks via Wormhole Native Token Transfers.
+Bridge support is currently a **safe stub** that explains the present state of RLUSD bridging.
 
-> **Current status**: Wormhole NTT for RLUSD on L2s is in testing. XRPL ↔ EVM bridging is not supported by Wormhole NTT.
+> **Current status**:
+> - Wormhole NTT for RLUSD is still in testing
+> - XRPL ↔ EVM bridging is **not supported** by Wormhole NTT
+> - L2 RLUSD contract addresses are not yet wired into this CLI
+>
+> The command is intentionally non-destructive until production-ready deployments are available.
 
 ```bash
 rlusd bridge --from ethereum --to base --amount 500
@@ -668,7 +685,7 @@ npm run build        # production build
 | Ethereum | [viem](https://viem.sh/) v2.x |
 | DEX (EVM) | Uniswap V3 SwapRouter02 |
 | Lending | Aave V3 Pool (raw contract calls) |
-| Cross-chain | [Wormhole SDK](https://github.com/wormhole-foundation/wormhole-sdk-ts) |
+| Cross-chain | Wormhole NTT bridge workflow (currently documented stub / planned integration) |
 | Price | Chainlink AggregatorV3 |
 | CLI | [Commander.js](https://github.com/tj/commander.js) v13.x |
 | Testing | Vitest |

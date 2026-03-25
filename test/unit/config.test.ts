@@ -40,6 +40,9 @@ describe("Config System", () => {
   });
 
   afterEach(() => {
+    delete process.env.RLUSD_RUNTIME_NETWORK;
+    delete process.env.RLUSD_RUNTIME_OUTPUT;
+    delete process.env.RLUSD_RUNTIME_CHAIN;
     rmSync(TEST_HOME, { recursive: true, force: true });
   });
 
@@ -106,6 +109,33 @@ describe("Config System", () => {
       expect(config.chains.xrpl).toBeDefined();
       expect(config.chains.ethereum).toBeDefined();
       expect(config.chains.xrpl.websocket).toContain("rippletest.net");
+    });
+
+    it("should fall back to testnet when stored environment is invalid", () => {
+      ensureConfigDir();
+      fsWriteFileSync(getConfigPath(), "environment: broken\n", "utf-8");
+      const config = loadConfig();
+      expect(config.environment).toBe("testnet");
+    });
+
+    it("should apply runtime network override without persisting it", () => {
+      setNetwork("testnet");
+      process.env.RLUSD_RUNTIME_NETWORK = "mainnet";
+      const runtimeConfig = loadConfig();
+      expect(runtimeConfig.environment).toBe("mainnet");
+      expect(runtimeConfig.chains.xrpl.websocket).toBe("wss://xrplcluster.com/");
+
+      delete process.env.RLUSD_RUNTIME_NETWORK;
+      const persistedConfig = loadConfig();
+      expect(persistedConfig.environment).toBe("testnet");
+    });
+
+    it("should apply runtime output and chain overrides", () => {
+      process.env.RLUSD_RUNTIME_OUTPUT = "json";
+      process.env.RLUSD_RUNTIME_CHAIN = "ethereum";
+      const config = loadConfig();
+      expect(config.output_format).toBe("json");
+      expect(config.default_chain).toBe("ethereum");
     });
   });
 

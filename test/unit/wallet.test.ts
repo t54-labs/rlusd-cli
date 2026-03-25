@@ -21,6 +21,7 @@ const {
 const {
   generateEvmWallet,
   importEvmWalletFromPrivateKey,
+  importEvmWalletFromMnemonic,
   serializeEvmWallet,
   decryptEvmPrivateKey,
 } = await import("../../src/wallet/evm-wallet.js");
@@ -127,6 +128,18 @@ describe("EVM Wallet", () => {
     const decrypted = decryptEvmPrivateKey(stored, "mypass");
     expect(decrypted).toBe(wallet.privateKey);
   });
+
+  it("should import wallet from mnemonic as a real private key", () => {
+    const mnemonic =
+      "test test test test test test test test test test test junk";
+    const imported = importEvmWalletFromMnemonic(mnemonic);
+    expect(imported.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(imported.privateKey).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("should reject invalid mnemonic", () => {
+    expect(() => importEvmWalletFromMnemonic("invalid mnemonic words")).toThrow();
+  });
 });
 
 describe("Wallet Manager", () => {
@@ -184,10 +197,11 @@ describe("Wallet Manager", () => {
   it("should filter wallets by chain", () => {
     saveWallet(serializeXrplWallet("x1", generateXrplWallet(), "p"));
     saveWallet(serializeEvmWallet("e1", generateEvmWallet(), "p"));
-    saveWallet(serializeEvmWallet("e2", generateEvmWallet(), "p"));
+    saveWallet(serializeEvmWallet("e2", generateEvmWallet(), "p", "base"));
 
     expect(listWalletsByChain("xrpl")).toHaveLength(1);
-    expect(listWalletsByChain("ethereum")).toHaveLength(2);
+    expect(listWalletsByChain("ethereum")).toHaveLength(1);
+    expect(listWalletsByChain("base")).toHaveLength(1);
   });
 
   it("should set and get default wallet", () => {
@@ -206,5 +220,9 @@ describe("Wallet Manager", () => {
     const defaultWallet = getDefaultWallet("xrpl");
     expect(defaultWallet).not.toBeNull();
     expect(defaultWallet!.name).toBe("first");
+  });
+
+  it("should reject setting a missing wallet as default", () => {
+    expect(() => setDefaultWallet("xrpl", "missing-wallet")).toThrow();
   });
 });

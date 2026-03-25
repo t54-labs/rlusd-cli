@@ -33,13 +33,12 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
-      - name: Run unit tests
-        run: npx vitest run test/unit/
-
-      - name: Run E2E tests
-        run: npx vitest run test/e2e/
+      - name: Run full test suite
+        if: matrix.node-version != 22
+        run: npx vitest run
 
       - name: Run full test suite with coverage
+        if: matrix.node-version == 22
         run: npx vitest run --coverage
 
       - name: Upload coverage artifact
