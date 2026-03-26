@@ -1,4 +1,4 @@
-import type { PriceApiConfig } from "../types/index.js";
+import type { ChainContracts, PriceApiConfig } from "../types/index.js";
 
 export const RLUSD_XRPL_ISSUER_MAINNET = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
 export const RLUSD_XRPL_ISSUER_TESTNET = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
@@ -17,6 +17,7 @@ export const RLUSD_ETH_DECIMALS = 18;
 export const CHAINLINK_RLUSD_USD_ORACLE = "0x26C46B7aD0012cA71F2298ada567dC9Af14E7f2A";
 
 export const AAVE_V3_POOL_ETHEREUM = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
+export const CURVE_RLUSD_USDC_POOL_ETHEREUM = "0xd001ae433f254283fece51d4acce8c53263aa186";
 
 export const CONFIG_DIR = ".config/rlusd-cli";
 export const CONFIG_FILE = "config.yml";
@@ -34,11 +35,12 @@ export const DEFAULT_PRICE_API: PriceApiConfig = {
   base_url: "https://api.coingecko.com/api/v3",
 };
 
-export const DEFAULT_CONTRACTS: Record<string, { uniswap_router?: string; uniswap_quoter?: string; aave_v3_pool?: string }> = {
+export const DEFAULT_CONTRACTS: Record<string, ChainContracts> = {
   ethereum: {
     uniswap_router: UNISWAP_V3_SWAP_ROUTER,
     uniswap_quoter: UNISWAP_V3_QUOTER_V2,
     aave_v3_pool: AAVE_V3_POOL_ETHEREUM,
+    curve_rlusd_usdc_pool: CURVE_RLUSD_USDC_POOL_ETHEREUM,
   },
 };
 

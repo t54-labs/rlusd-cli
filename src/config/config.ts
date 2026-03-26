@@ -249,6 +249,7 @@ const VALID_CONTRACT_FIELDS: ReadonlySet<keyof ChainContracts> = new Set([
   "uniswap_router",
   "uniswap_quoter",
   "aave_v3_pool",
+  "curve_rlusd_usdc_pool",
 ]);
 
 export function setContract(chain: ChainName, field: keyof ChainContracts, address: string): AppConfig {

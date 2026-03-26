@@ -30,12 +30,14 @@ const {
 
 const { getNetworkPreset, isValidNetwork } = await import("../../src/config/networks.js");
 const { getPreparePolicy } = await import("../../src/policy/index.js");
+const { resolveCurvePool } = await import("../../src/defi/curve-pool.js");
 
 const {
   RLUSD_XRPL_ISSUER,
   RLUSD_XRPL_ISSUER_TESTNET,
   RLUSD_ETH_CONTRACT,
   RLUSD_ETH_CONTRACT_TESTNET,
+  CURVE_RLUSD_USDC_POOL_ETHEREUM,
 } = await import("../../src/config/constants.js");
 
 describe("Config System", () => {
@@ -154,6 +156,11 @@ describe("Config System", () => {
       const config = loadConfig();
       expect(config.output_format).toBe("json");
       expect(config.default_chain).toBe("ethereum");
+    });
+
+    it("should include the default Ethereum Curve RLUSD-USDC pool address", () => {
+      const config = loadConfig();
+      expect(config.contracts?.ethereum?.curve_rlusd_usdc_pool).toBe(CURVE_RLUSD_USDC_POOL_ETHEREUM);
     });
   });
 
@@ -279,6 +286,28 @@ describe("Config System", () => {
       expect(lpPolicy).toEqual({
         requires_confirmation: true,
         warnings: ["mainnet", "real_funds", "token_allowance"],
+      });
+    });
+  });
+
+  describe("curve pool resolver", () => {
+    it("should reject non-Ethereum-mainnet labels", () => {
+      const config = loadConfig();
+      expect(() => resolveCurvePool("ethereum-sepolia", config)).toThrow("ethereum-mainnet");
+      expect(() => resolveCurvePool("base-mainnet", config)).toThrow("ethereum-mainnet");
+    });
+
+    it("should resolve the fixed pool only for ethereum-mainnet", () => {
+      const config = loadConfig();
+      const pool = resolveCurvePool("ethereum-mainnet", config);
+
+      expect(pool.chain).toBe("ethereum-mainnet");
+      expect(pool.address).toBe(CURVE_RLUSD_USDC_POOL_ETHEREUM);
+      expect(pool.lpTokenAddress).toBe(CURVE_RLUSD_USDC_POOL_ETHEREUM);
+      expect(pool.coins.map((coin) => coin.symbol)).toEqual(["USDC", "RLUSD"]);
+      expect(pool.coinIndexBySymbol).toEqual({
+        USDC: 0,
+        RLUSD: 1,
       });
     });
   });

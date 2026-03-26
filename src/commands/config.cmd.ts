@@ -95,6 +95,7 @@ export function registerConfigCommand(program: Command): void {
     .option("--uniswap-router <address>", "Uniswap V3 SwapRouter address (requires --chain)")
     .option("--uniswap-quoter <address>", "Uniswap V3 QuoterV2 address (requires --chain)")
     .option("--aave-pool <address>", "Aave V3 Pool address (requires --chain)")
+    .option("--curve-rlusd-usdc-pool <address>", "Curve RLUSD-USDC pool address (requires --chain ethereum)")
     .option("--faucet-url <url>", "XRPL XRP faucet URL (requires --network testnet|devnet)")
     .action((opts) => {
       let changed = false;
@@ -189,6 +190,21 @@ export function registerConfigCommand(program: Command): void {
         if (!contractChain) { logger.error("--chain is required when setting --aave-pool"); process.exitCode = 1; return; }
         setContract(contractChain, "aave_v3_pool", opts.aavePool);
         logger.success(`Aave V3 Pool for ${contractChain} set to ${opts.aavePool}`);
+        changed = true;
+      }
+      if (opts.curveRlusdUsdcPool) {
+        if (!contractChain) {
+          logger.error("--chain is required when setting --curve-rlusd-usdc-pool");
+          process.exitCode = 1;
+          return;
+        }
+        if (contractChain !== "ethereum") {
+          logger.error("--curve-rlusd-usdc-pool is only supported for --chain ethereum");
+          process.exitCode = 1;
+          return;
+        }
+        setContract(contractChain, "curve_rlusd_usdc_pool", opts.curveRlusdUsdcPool);
+        logger.success(`Curve RLUSD-USDC Pool for ${contractChain} set to ${opts.curveRlusdUsdcPool}`);
         changed = true;
       }
 

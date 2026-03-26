@@ -13,7 +13,7 @@ vi.mock("node:os", async () => {
 });
 
 const { createProgram } = await import("../../src/cli.js");
-const { ensureConfigDir, getPlansDir } = await import("../../src/config/config.js");
+const { ensureConfigDir, getPlansDir, loadConfig } = await import("../../src/config/config.js");
 const { createPlanId, createPreparedPlan, loadPreparedPlan } = await import("../../src/plans/index.js");
 const { saveWallet } = await import("../../src/wallet/manager.js");
 const { generateXrplWallet, serializeXrplWallet } = await import("../../src/wallet/xrpl-wallet.js");
@@ -154,6 +154,44 @@ describe("Command Registration", () => {
     const subcommands = configCmd!.commands.map((c) => c.name());
     expect(subcommands).toContain("get");
     expect(subcommands).toContain("set");
+  });
+
+  it("should accept config set for the Curve RLUSD-USDC pool", () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(
+        [
+          "config",
+          "set",
+          "--chain",
+          "ethereum",
+          "--curve-rlusd-usdc-pool",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr).toEqual([]);
+    expect(loadConfig().contracts?.ethereum?.curve_rlusd_usdc_pool).toBe(
+      "0x1111111111111111111111111111111111111111",
+    );
+    expect(stdout.length).toBeGreaterThan(0);
   });
 
   it("should register balance command with options", () => {

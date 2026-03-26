@@ -31,6 +31,7 @@ export interface ChainContracts {
   uniswap_router?: string;
   uniswap_quoter?: string;
   aave_v3_pool?: string;
+  curve_rlusd_usdc_pool?: string;
 }
 
 export interface FaucetConfig {
