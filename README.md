@@ -148,6 +148,12 @@ rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
 # DeFi discovery and execution
 rlusd defi venues --chain ethereum-mainnet --capability swap,lend,lp --json
 rlusd defi quote swap --chain ethereum-mainnet --venue uniswap --from RLUSD --to USDC --amount 1000 --json
+rlusd defi quote swap --chain ethereum-mainnet --venue curve --from RLUSD --to USDC --amount 1000 --json
+rlusd defi swap prepare --chain ethereum-mainnet --venue curve --from-wallet ops --from RLUSD --to USDC --amount 1000 --slippage 50 --json
+rlusd defi swap execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd defi lp preview --chain ethereum-mainnet --venue curve --operation add --rlusd-amount 1000 --usdc-amount 1000 --json
+rlusd defi lp prepare --chain ethereum-mainnet --venue curve --operation remove --from-wallet ops --lp-amount 50 --receive-token RLUSD --json
+rlusd defi lp execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
 rlusd defi supply preview --chain ethereum-mainnet --venue aave --amount 5000 --json
 rlusd defi supply prepare --chain ethereum-mainnet --venue aave --from-wallet ops --amount 5000 --json
 rlusd defi supply execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
@@ -157,7 +163,10 @@ Contract guarantees for skill consumers:
 - `--json` returns one shared envelope with `ok`, `command`, `chain`, `timestamp`, `warnings`, and `next`.
 - Write flows use `prepare -> review -> execute`; execution requires a matching `--confirm-plan-id` when the plan is confirmation-gated.
 - Explicit wallet flags are preferred over implicit defaults for write paths: `--from-wallet`, `--owner-wallet`, and `--wallet`.
-- `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`).
+- Top-level `defi` commands always require an explicit `--chain`, and all swap or LP flows require an explicit `--venue`.
+- `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`) plus `route.venue`.
+- `defi swap prepare|execute` and `defi lp preview|prepare|execute` share the same prepared-plan contract as other write flows.
+- Curve support in this batch is intentionally narrow: Ethereum mainnet only, RLUSD/USDC only, and LP add/remove semantics are fixed to `--operation add` with both token amounts or `--operation remove` with `--lp-amount` plus `--receive-token`.
 
 ---
 
