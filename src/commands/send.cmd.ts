@@ -155,6 +155,10 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
         if (!validateAddress(opts.to, resolved.chain)) {
           throw new Error(`Invalid recipient address for ${resolved.chain}: ${opts.to}`);
         }
+        resolveWalletForChain(resolved.chain, {
+          walletName: opts.fromWallet,
+          optionName: "--from-wallet",
+        });
 
         const contractAddress = getRlusdContractAddress(resolved.chain, config);
         const amountRaw = toErc20Units(opts.amount, config.rlusd.eth_decimals);

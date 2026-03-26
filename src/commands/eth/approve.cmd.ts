@@ -176,6 +176,10 @@ export function registerEvmApproveCommand(parent: Command, program: Command): vo
         if (!validateAddress(opts.spender, resolved.chain)) {
           throw new Error(`Invalid spender address for ${resolved.chain}: ${opts.spender}`);
         }
+        resolveWalletForChain(resolved.chain, {
+          walletName: opts.ownerWallet,
+          optionName: "--owner-wallet",
+        });
 
         const contractAddress = getRlusdContractAddress(resolved.chain, config);
         const amountRaw = toErc20Units(opts.amount, config.rlusd.eth_decimals);
