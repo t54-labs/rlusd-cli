@@ -209,6 +209,8 @@ export async function previewCurveLp(input: DefiLpPreviewRequest): Promise<DefiL
   if (!publicClient.readContract) {
     throw new Error("Venue curve requires a client with readContract support.");
   }
+  const quotedAt = new Date().toISOString();
+  const quoteWindow = createQuoteWindow(quotedAt, 30);
 
   if (input.operation === "add") {
     const amounts = buildAddLiquidityAmounts(pool, input);
@@ -224,6 +226,7 @@ export async function previewCurveLp(input: DefiLpPreviewRequest): Promise<DefiL
       operation: "add",
       pool_name: pool.name,
       pool_address: pool.address,
+      ...quoteWindow,
       expected_lp_amount: formatUnits(expectedLpAmount, CURVE_LP_DECIMALS),
     };
   }
@@ -241,6 +244,7 @@ export async function previewCurveLp(input: DefiLpPreviewRequest): Promise<DefiL
     operation: "remove",
     pool_name: pool.name,
     pool_address: pool.address,
+    ...quoteWindow,
     receive_token: remove.receiveToken,
     expected_receive_amount: formatUnits(expectedReceiveAmount, remove.coin.decimals),
   };

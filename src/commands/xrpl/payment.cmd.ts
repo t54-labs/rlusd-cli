@@ -95,7 +95,10 @@ export function registerPaymentCommand(parent: Command, program: Command): void 
         }) as StoredXrplWallet;
         const amount = normalizeIssuedTokenAmount(opts.amount, "Amount");
         const asset = buildXrplAsset(config);
-        const destinationTrustline = await getXrplTrustlineStatus(resolved.network, opts.to);
+        const destinationTrustline =
+          opts.to === asset.issuer
+            ? { present: true, account_exists: true }
+            : await getXrplTrustlineStatus(resolved.network, opts.to);
 
         if (!destinationTrustline.present) {
           if (!destinationTrustline.account_exists) {

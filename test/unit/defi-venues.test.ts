@@ -65,6 +65,38 @@ describe("DeFi venues", () => {
     expect(quote.route.gas_estimate).toBe("21000");
     expect(publicClient.simulateContract).toHaveBeenCalledOnce();
   });
+
+  it("should include freshness metadata on curve LP previews", async () => {
+    const adapter = getDefiVenueAdapter("curve");
+    const config = loadConfig();
+    const publicClient = {
+      readContract: vi.fn().mockResolvedValue(1234000000000000000n),
+    };
+
+    const preview = await adapter.previewLp({
+      chain: {
+        chain: "ethereum",
+        network: "mainnet",
+        label: "ethereum-mainnet",
+        displayName: "Ethereum Mainnet",
+      },
+      config,
+      publicClient,
+      operation: "add",
+      rlusdAmount: "100",
+      usdcAmount: "100",
+    });
+
+    const metadata = preview as {
+      quoted_at?: string;
+      ttl_seconds?: number;
+      expires_at?: string;
+    };
+
+    expect(metadata.quoted_at).toEqual(expect.any(String));
+    expect(metadata.ttl_seconds).toBe(30);
+    expect(metadata.expires_at).toEqual(expect.any(String));
+  });
 });
 
 describe("DeFi executor", () => {
