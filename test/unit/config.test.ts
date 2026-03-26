@@ -267,6 +267,20 @@ describe("Config System", () => {
       expect(transferPolicy.requires_confirmation).toBe(false);
       expect(transferPolicy.warnings).toEqual([]);
     });
+
+    it("should require mainnet confirmation metadata for new defi plan actions", () => {
+      const swapPolicy = getPreparePolicy("ethereum-mainnet", "defi.swap");
+      const lpPolicy = getPreparePolicy("ethereum-mainnet", "defi.lp");
+
+      expect(swapPolicy).toEqual({
+        requires_confirmation: true,
+        warnings: ["mainnet", "real_funds", "token_allowance"],
+      });
+      expect(lpPolicy).toEqual({
+        requires_confirmation: true,
+        warnings: ["mainnet", "real_funds", "token_allowance"],
+      });
+    });
   });
 
 });

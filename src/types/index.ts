@@ -90,6 +90,8 @@ export type PrepareAction =
   | "evm.transfer"
   | "evm.approve"
   | "defi.supply"
+  | "defi.swap"
+  | "defi.lp"
   | "xrpl.trustline"
   | "xrpl.payment";
 

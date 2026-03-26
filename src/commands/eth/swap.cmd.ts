@@ -37,6 +37,12 @@ export function resolveTokenAddress(symbol: string): { address: string; decimals
   return null;
 }
 
+export function requireUniswapVenue(venue: string): void {
+  if (venue.trim().toLowerCase() !== "uniswap") {
+    throw new Error("Only --venue uniswap is supported for this command today.");
+  }
+}
+
 export function registerSwapCommand(parent: Command, program: Command): void {
   const swapCmd = parent.command("swap").description("Swap RLUSD for other tokens on Uniswap V3");
 
@@ -45,6 +51,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Sell RLUSD for another token via Uniswap V3 exactInputSingle")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
     .requiredOption("--for <token>", "token to receive: USDC | USDT | WETH | DAI | WBTC")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
@@ -68,6 +75,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
+        requireUniswapVenue(opts.venue);
         await executeSwapSell(chain, opts, outToken, config, outputFormat);
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
@@ -80,6 +88,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Buy RLUSD with another token via Uniswap V3")
     .requiredOption("--amount <n>", "RLUSD amount to buy")
     .requiredOption("--with <token>", "token to pay with: USDC | USDT | WETH | DAI | WBTC")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
@@ -102,6 +111,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
+        requireUniswapVenue(opts.venue);
         await executeSwapBuy(chain, opts, inToken, config, outputFormat);
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
@@ -114,6 +124,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Get a quote for swapping RLUSD (no transaction submitted)")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
     .requiredOption("--for <token>", "token to receive")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--fee-tier <fee>", "Uniswap pool fee tier", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
     .action(async (opts) => {
@@ -130,6 +141,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
+        requireUniswapVenue(opts.venue);
         const publicClient = getEvmPublicClient(chain);
         const rlusdAddress = getRlusdContractAddress(chain, config);
         const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);

@@ -22,7 +22,7 @@ import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/
 import { createErrorEnvelope, createSuccessEnvelope } from "../../agent/envelope.js";
 import { createPreparedPlan, loadPreparedPlan } from "../../plans/index.js";
 import { createQuoteWindow } from "../../services/price-feed.js";
-import { parseFeeTier, resolveTokenAddress, resolveUniswapQuoter } from "./swap.cmd.js";
+import { parseFeeTier, requireUniswapVenue, resolveTokenAddress, resolveUniswapQuoter } from "./swap.cmd.js";
 
 const AAVE_VARIABLE_RATE_MODE = 2n;
 const BASE_CURRENCY_DECIMALS = 8;
@@ -457,13 +457,12 @@ export function registerTopLevelDefiCommand(program: Command): void {
   defiCmd
     .command("venues")
     .description("List known DeFi venues for a chain")
-    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
     .option("--capability <list>", "comma-separated capability filter")
     .action(async (opts: { chain?: string; capability?: string }) => {
       const config = loadConfig();
       try {
-        const chainInput = opts.chain || (program.opts().chain as string | undefined) || "ethereum";
-        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const resolved = resolveEvmChainRef(opts.chain as string, config.environment);
         const capabilityFilter = parseCapabilityFilter(opts.capability);
         const venues = DEFI_VENUES.filter((venue) =>
           capabilityFilter.length === 0 || capabilityFilter.some((capability) => venue.capabilities.includes(capability)),
@@ -497,16 +496,17 @@ export function registerTopLevelDefiCommand(program: Command): void {
   quoteCmd
     .command("swap")
     .description("Get a live swap quote for RLUSD")
-    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--venue <venue>", "venue name")
     .requiredOption("--from <symbol>", "source asset symbol")
     .requiredOption("--to <symbol>", "destination asset symbol")
     .requiredOption("--amount <amount>", "amount of source asset")
     .option("--fee-tier <fee>", "Uniswap pool fee tier", "3000")
-    .action(async (opts: { chain?: string; from: string; to: string; amount: string; feeTier?: string }) => {
+    .action(async (opts: { chain?: string; venue: string; from: string; to: string; amount: string; feeTier?: string }) => {
       const config = loadConfig();
       try {
-        const chainInput = opts.chain || (program.opts().chain as string | undefined) || "ethereum";
-        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const resolved = resolveEvmChainRef(opts.chain as string, config.environment);
+        requireUniswapVenue(opts.venue);
         if (opts.from.toUpperCase() !== "RLUSD") {
           throw new Error(`Only RLUSD swap quotes are supported today (received ${opts.from}).`);
         }
@@ -547,7 +547,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
                 amount: opts.amount,
               },
               route: {
-                venue: "uniswap",
+                venue: opts.venue.toLowerCase(),
                 pricing_source: "live_quote",
                 amount_out: formatUnits(amountOut, outToken.decimals),
                 fee_bps: fee / 100,
@@ -575,14 +575,13 @@ export function registerTopLevelDefiCommand(program: Command): void {
   supplyCmd
     .command("preview")
     .description("Preview a DeFi supply flow")
-    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
     .requiredOption("--venue <venue>", "venue name")
     .requiredOption("--amount <amount>", "amount of RLUSD to supply")
     .action(async (opts: { chain?: string; venue: string; amount: string }) => {
       const config = loadConfig();
       try {
-        const chainInput = opts.chain || (program.opts().chain as string | undefined) || "ethereum";
-        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const resolved = resolveEvmChainRef(opts.chain as string, config.environment);
         const venue = getVenue(opts.venue);
         if (!venue) {
           throw new Error(`Venue ${opts.venue} is not configured on ${resolved.label}.`);
@@ -623,15 +622,14 @@ export function registerTopLevelDefiCommand(program: Command): void {
   supplyCmd
     .command("prepare")
     .description("Prepare a DeFi supply flow")
-    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
     .requiredOption("--venue <venue>", "venue name")
     .requiredOption("--from-wallet <name>", "wallet name to supply from")
     .requiredOption("--amount <amount>", "amount of RLUSD to supply")
     .action(async (opts: { chain?: string; venue: string; fromWallet: string; amount: string }) => {
       const config = loadConfig();
       try {
-        const chainInput = opts.chain || (program.opts().chain as string | undefined) || "ethereum";
-        const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const resolved = resolveEvmChainRef(opts.chain as string, config.environment);
         const venue = getVenue(opts.venue);
         if (!venue || !venue.capabilities.includes("lend")) {
           throw new Error(`Venue ${opts.venue} does not support lend on ${resolved.label}.`);
