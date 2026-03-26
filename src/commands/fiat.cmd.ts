@@ -1,13 +1,24 @@
 import { Command } from "commander";
 
+import { createSuccessEnvelope } from "../agent/envelope.js";
 import { loadConfig } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import type { OutputFormat } from "../types/index.js";
 
-function writeData(program: Command, data: Record<string, unknown>): void {
+function writeData(program: Command, command: string, data: Record<string, unknown>): void {
   const config = loadConfig();
   const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+  if (outputFormat === "json" || outputFormat === "json-compact") {
+    const envelope = createSuccessEnvelope({
+      command,
+      timestamp: new Date().toISOString(),
+      data,
+    });
+    logger.raw(outputFormat === "json" ? JSON.stringify(envelope, null, 2) : JSON.stringify(envelope));
+    return;
+  }
+
   logger.raw(formatOutput(data, outputFormat));
 }
 
@@ -20,7 +31,7 @@ export function registerFiatCommand(program: Command): void {
     .command("checklist")
     .description("Show the RLUSD fiat onboarding checklist")
     .action(() => {
-      writeData(program, {
+      writeData(program, "fiat onboarding checklist", {
         steps: [
           "Install or update rlusd-cli to the latest cutover-ready version.",
           "Set RLUSD_WALLET_PASSWORD and generate or import the wallet for your target chain.",
@@ -37,7 +48,7 @@ export function registerFiatCommand(program: Command): void {
     .command("instructions")
     .description("Show fiat buy instructions for RLUSD")
     .action(() => {
-      writeData(program, {
+      writeData(program, "fiat buy instructions", {
         providers: [
           {
             provider: "MoonPay",
@@ -61,7 +72,7 @@ export function registerFiatCommand(program: Command): void {
     .command("instructions")
     .description("Show fiat redemption instructions for RLUSD")
     .action(() => {
-      writeData(program, {
+      writeData(program, "fiat redeem instructions", {
         providers: [
           {
             provider: "MoonPay",

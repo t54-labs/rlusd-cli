@@ -315,6 +315,8 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(output.data.action).toBe("defi.supply");
     expect(output.data.plan_path).toBeTruthy();
     expect(existsSync(output.data.plan_path)).toBe(true);
+    expect(output.warnings).toContain("token_allowance");
+    expect(output.warnings).not.toContain("preview_only");
 
     const stored = JSON.parse(readFileSync(output.data.plan_path, "utf-8"));
     expect(stored).toEqual(output);

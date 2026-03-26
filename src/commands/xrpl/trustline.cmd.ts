@@ -5,6 +5,7 @@ import {
   disconnectXrplClient,
   getXrplAccountInfo,
   getXrplClient,
+  getXrplTrustlineStatus,
   resolveXrplChainRef,
 } from "../../clients/xrpl-client.js";
 import { getDefaultWallet, resolveWalletForChain } from "../../wallet/manager.js";
@@ -288,6 +289,8 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
       try {
         const config = loadConfig();
         const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
         const address = opts.address || getDefaultWallet("xrpl")?.address;
 
         if (!address) {
@@ -296,47 +299,37 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
           return;
         }
 
-        const client = await getXrplClient();
-        const lines = await client.request({
-          command: "account_lines",
-          account: address,
-          peer: config.rlusd.xrpl_issuer,
-          ledger_index: "validated",
-        });
-
-        const rlusdLine = lines.result.lines.find(
-          (line: {
-            currency: string;
-            account: string;
-            balance: string;
-            limit: string;
-            freeze?: boolean;
-          }) =>
-            line.currency === config.rlusd.xrpl_currency &&
-            line.account === config.rlusd.xrpl_issuer,
-        );
-
-        if (!rlusdLine) {
-          logger.warn("No RLUSD trust line found. Run: rlusd xrpl trustline setup");
-          return;
-        }
-
+        const trustline = await getXrplTrustlineStatus(resolved.network, address);
         const data = {
-          currency: rlusdLine.currency,
-          issuer: rlusdLine.account,
-          balance: rlusdLine.balance,
-          limit: rlusdLine.limit,
-          frozen: rlusdLine.freeze ? "yes" : "no",
+          address,
+          issuer: config.rlusd.xrpl_issuer,
+          currency: config.rlusd.xrpl_currency,
+          account_exists: trustline.account_exists,
+          has_trustline: trustline.present,
+          balance: trustline.balance ?? null,
+          limit: trustline.limit ?? null,
+          frozen: trustline.frozen ?? false,
         };
 
         if (outputFormat === "json" || outputFormat === "json-compact") {
           logger.raw(formatOutput(data, outputFormat));
-        } else {
-          logger.success("RLUSD trust line is active");
-          logger.label("Balance", rlusdLine.balance);
-          logger.label("Limit", rlusdLine.limit);
-          logger.label("Frozen", rlusdLine.freeze ? "Yes" : "No");
+          return;
         }
+
+        if (!trustline.account_exists) {
+          logger.warn("XRPL account does not exist or is not activated yet.");
+          return;
+        }
+
+        if (!trustline.present) {
+          logger.warn("No RLUSD trust line found. Run: rlusd xrpl trustline setup");
+          return;
+        }
+
+        logger.success("RLUSD trust line is active");
+        logger.label("Balance", trustline.balance ?? "0");
+        logger.label("Limit", trustline.limit ?? "0");
+        logger.label("Frozen", trustline.frozen ? "Yes" : "No");
       } catch (err) {
         logger.error(`Trust line status check failed: ${(err as Error).message}`);
         process.exitCode = 1;

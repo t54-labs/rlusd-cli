@@ -456,6 +456,19 @@ function parseSlippageBps(raw?: string): number {
   return value;
 }
 
+function isRetryableUniswapQuoteFailure(venue: string, message: string): boolean {
+  if (venue.trim().toLowerCase() !== "uniswap") {
+    return false;
+  }
+
+  return ![
+    "Invalid --fee-tier",
+    "Unknown token:",
+    "Only RLUSD swap quotes are supported today",
+    "Venue uniswap requires a client with simulateContract support.",
+  ].some((marker) => message.includes(marker));
+}
+
 function requireCurveLpVenue(venue: string): void {
   if (venue.trim().toLowerCase() !== "curve") {
     throw new Error("Only --venue curve is supported for this command today.");
@@ -552,12 +565,21 @@ export function registerTopLevelDefiCommand(program: Command): void {
           }),
         );
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to fetch live quote.";
+        const retryable = isRetryableUniswapQuoteFailure(opts.venue, message);
         emitEnvelope(
           createErrorEnvelope({
             command: "defi.quote.swap",
             timestamp: new Date().toISOString(),
             code: "QUOTE_UNAVAILABLE",
-            message: error instanceof Error ? error.message : "Unable to fetch live quote.",
+            message,
+            retryable,
+            details: retryable
+              ? {
+                  retry_hint: "retry_fee_tiers",
+                  candidate_fee_tiers: [100, 500, 3000, 10000],
+                }
+              : undefined,
           }),
         );
         process.exitCode = 1;
@@ -762,7 +784,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
           createSuccessEnvelope({
             command: "defi.lp.preview",
             chain: resolved.label,
-            timestamp: new Date().toISOString(),
+            timestamp: preview.quoted_at,
             data: preview,
             warnings: ["quote_expires"],
           }),
@@ -1057,8 +1079,8 @@ export function registerTopLevelDefiCommand(program: Command): void {
           },
           warnings:
             resolved.network === "mainnet"
-              ? ["mainnet", "real_funds", "token_allowance", "preview_only", "collateral_unsupported"]
-              : ["preview_only", "collateral_unsupported"],
+              ? ["mainnet", "real_funds", "token_allowance", "collateral_unsupported"]
+              : ["collateral_unsupported"],
         });
 
         emitEnvelope(plan);

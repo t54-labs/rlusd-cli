@@ -166,7 +166,13 @@ export async function getXrplAccountInfo(
 export async function getXrplTrustlineStatus(
   network: NetworkEnvironment,
   address: string,
-): Promise<{ present: boolean; account_exists: boolean; balance?: string; limit?: string }> {
+): Promise<{
+  present: boolean;
+  account_exists: boolean;
+  balance?: string;
+  limit?: string;
+  frozen?: boolean;
+}> {
   const client = await getXrplClient(network);
   const config = loadConfig();
 
@@ -179,7 +185,7 @@ export async function getXrplTrustlineStatus(
     });
 
     const rlusdLine = lines.result.lines.find(
-      (line: { currency: string; account: string; balance: string; limit: string }) =>
+      (line: { currency: string; account: string; balance: string; limit: string; freeze?: boolean }) =>
         line.currency === config.rlusd.xrpl_currency && line.account === config.rlusd.xrpl_issuer,
     );
 
@@ -192,6 +198,7 @@ export async function getXrplTrustlineStatus(
       account_exists: true,
       balance: rlusdLine.balance,
       limit: rlusdLine.limit,
+      frozen: rlusdLine.freeze,
     };
   } catch (err: unknown) {
     const error = err as { data?: { error?: string } };

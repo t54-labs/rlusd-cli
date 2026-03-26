@@ -98,6 +98,9 @@ export type DefiLpPreviewResult = {
   operation: DefiLpOperation;
   pool_name: string;
   pool_address: `0x${string}`;
+  quoted_at: string;
+  ttl_seconds: number;
+  expires_at: string;
   expected_lp_amount?: string;
   expected_receive_amount?: string;
   receive_token?: "RLUSD" | "USDC";
