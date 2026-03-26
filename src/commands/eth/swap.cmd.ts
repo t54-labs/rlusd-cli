@@ -7,35 +7,22 @@ import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
 import { getEvmPublicClient, getViemChain } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { UNISWAP_V3_ROUTER_ABI, UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-router.js";
-import {
-  UNISWAP_V3_SWAP_ROUTER,
-  UNISWAP_V3_QUOTER_V2,
-  WELL_KNOWN_TOKENS,
-} from "../../config/constants.js";
-import type { AppConfig } from "../../types/index.js";
+import { WELL_KNOWN_TOKENS } from "../../config/constants.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, OutputFormat, StoredEvmWallet } from "../../types/index.js";
+import type { AppConfig, EvmChainName, OutputFormat, StoredEvmWallet } from "../../types/index.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
+import {
+  parseFeeTier,
+  quoteUniswapSwap,
+  resolveTokenAddress,
+  resolveUniswapQuoter,
+  resolveUniswapRouter,
+} from "../../defi/venues/uniswap.js";
 
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 const DEFAULT_FEE_TIER = 3000; // 0.3% Uniswap pool fee
-
-export function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0x${string}` {
-  return (config.contracts?.[chain]?.uniswap_router || UNISWAP_V3_SWAP_ROUTER) as `0x${string}`;
-}
-
-export function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
-  return (config.contracts?.[chain]?.uniswap_quoter || UNISWAP_V3_QUOTER_V2) as `0x${string}`;
-}
-
-export function resolveTokenAddress(symbol: string): { address: string; decimals: number } | null {
-  const upper = symbol.toUpperCase();
-  const token = WELL_KNOWN_TOKENS[upper];
-  if (token) return { address: token.address, decimals: token.decimals };
-  return null;
-}
 
 export function requireUniswapVenue(venue: string): void {
   if (venue.trim().toLowerCase() !== "uniswap") {
@@ -142,34 +129,25 @@ export function registerSwapCommand(parent: Command, program: Command): void {
       try {
         assertActiveRlusdEvmChain(chain);
         requireUniswapVenue(opts.venue);
-        const publicClient = getEvmPublicClient(chain);
-        const rlusdAddress = getRlusdContractAddress(chain, config);
-        const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
-        const fee = parseFeeTier(opts.feeTier);
-
-        const result = await publicClient.simulateContract({
-          address: resolveUniswapQuoter(chain, config),
-          abi: UNISWAP_QUOTER_V2_ABI,
-          functionName: "quoteExactInputSingle",
-          args: [
-            {
-              tokenIn: rlusdAddress,
-              tokenOut: outToken.address as `0x${string}`,
-              amountIn,
-              fee,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
+        const quote = await quoteUniswapSwap({
+          chain: {
+            chain,
+            network: config.environment === "mainnet" ? "mainnet" : "testnet",
+            label: config.environment === "mainnet" ? `${chain}-mainnet` : `${chain}-sepolia`,
+            displayName: chain,
+          },
+          config,
+          fromSymbol: "RLUSD",
+          toSymbol: opts.for,
+          amount: opts.amount,
+          feeTier: opts.feeTier,
         });
-
-        const [amountOut, , , gasEstimate] = result.result;
-        const formattedOut = formatUnits(amountOut, outToken.decimals);
 
         const data = {
           sell: `${opts.amount} RLUSD`,
-          receive: `~${formattedOut} ${opts.for.toUpperCase()}`,
-          fee_tier: `${fee / 10000}%`,
-          gas_estimate: gasEstimate.toString(),
+          receive: `~${quote.route.amount_out} ${opts.for.toUpperCase()}`,
+          fee_tier: `${(quote.route.fee_bps ?? 0) / 100}%`,
+          gas_estimate: quote.route.gas_estimate,
         };
 
         if (outputFormat === "json" || outputFormat === "json-compact") {
@@ -177,9 +155,9 @@ export function registerSwapCommand(parent: Command, program: Command): void {
         } else {
           logger.success("Uniswap V3 Quote");
           logger.label("Sell", `${opts.amount} RLUSD`);
-          logger.label("Receive (est.)", `${formattedOut} ${opts.for.toUpperCase()}`);
-          logger.label("Pool Fee", `${fee / 10000}%`);
-          logger.label("Gas Estimate", gasEstimate.toString());
+          logger.label("Receive (est.)", `${quote.route.amount_out} ${opts.for.toUpperCase()}`);
+          logger.label("Pool Fee", `${(quote.route.fee_bps ?? 0) / 100}%`);
+          logger.label("Gas Estimate", quote.route.gas_estimate);
         }
       } catch (err) {
         logger.error(`Quote failed: ${(err as Error).message}`);
@@ -205,14 +183,6 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyWalletClient = any;
-
-export function parseFeeTier(feeTier: string | undefined): number {
-  const fee = Number.parseInt(feeTier || String(DEFAULT_FEE_TIER), 10);
-  if (![100, 500, 3000, 10000].includes(fee)) {
-    throw new Error("Invalid --fee-tier. Supported values: 100, 500, 3000, 10000.");
-  }
-  return fee;
-}
 
 function parseSlippageBps(raw: string | undefined): number {
   const value = Number.parseInt(raw || String(DEFAULT_SLIPPAGE_BPS), 10);

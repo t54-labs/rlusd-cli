@@ -7,7 +7,6 @@ import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
 import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { AAVE_POOL_ABI } from "../../abi/aave-pool.js";
-import { UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-router.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, ResolvedAsset } from "../../types/index.js";
@@ -21,8 +20,8 @@ import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 import { createErrorEnvelope, createSuccessEnvelope } from "../../agent/envelope.js";
 import { createPreparedPlan, loadPreparedPlan } from "../../plans/index.js";
-import { createQuoteWindow } from "../../services/price-feed.js";
-import { parseFeeTier, requireUniswapVenue, resolveTokenAddress, resolveUniswapQuoter } from "./swap.cmd.js";
+import { assertExecutableDefiPlan, executePreparedDefiPlan } from "../../defi/executor.js";
+import { getDefiVenueAdapter } from "../../defi/venues/index.js";
 
 const AAVE_VARIABLE_RATE_MODE = 2n;
 const BASE_CURRENCY_DECIMALS = 8;
@@ -442,15 +441,6 @@ function parseCapabilityFilter(raw?: string): string[] {
     .filter(Boolean);
 }
 
-function requireConfirmedExecution(
-  plan: Awaited<ReturnType<typeof loadPreparedPlan>>,
-  confirmPlanId?: string,
-): void {
-  if (plan.data.requires_confirmation && confirmPlanId !== plan.data.plan_id) {
-    throw new Error("Execution requires an explicit confirmation matching the prepared plan id.");
-  }
-}
-
 function resolveDefiChain(opts: { chain?: string }, program: Command, config: ReturnType<typeof loadConfig>): string {
   const raw = opts.chain || program.opts().chain || config.default_chain;
   if (!raw) {
@@ -514,55 +504,21 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
-        requireUniswapVenue(opts.venue);
-        if (opts.from.toUpperCase() !== "RLUSD") {
-          throw new Error(`Only RLUSD swap quotes are supported today (received ${opts.from}).`);
-        }
-        const outToken = resolveTokenAddress(opts.to);
-        if (!outToken) {
-          throw new Error(`Unknown token: ${opts.to}`);
-        }
-
-        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
-        const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
-        const fee = parseFeeTier(opts.feeTier);
-        const quoteResult = await publicClient.simulateContract({
-          address: resolveUniswapQuoter(resolved.chain, config),
-          abi: UNISWAP_QUOTER_V2_ABI,
-          functionName: "quoteExactInputSingle",
-          args: [
-            {
-              tokenIn: getRlusdContractAddress(resolved.chain, config),
-              tokenOut: outToken.address as `0x${string}`,
-              amountIn,
-              fee,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
+        const adapter = getDefiVenueAdapter(opts.venue);
+        const quote = await adapter.quoteSwap({
+          chain: resolved,
+          config,
+          fromSymbol: opts.from,
+          toSymbol: opts.to,
+          amount: opts.amount,
+          feeTier: opts.feeTier,
         });
-
-        const [amountOut, , , gasEstimate] = quoteResult.result;
-        const quotedAt = new Date().toISOString();
         emitEnvelope(
           createSuccessEnvelope({
             command: "defi.quote.swap",
             chain: resolved.label,
-            timestamp: quotedAt,
-            data: {
-              request: {
-                from: opts.from.toUpperCase(),
-                to: opts.to.toUpperCase(),
-                amount: opts.amount,
-              },
-              route: {
-                venue: opts.venue.toLowerCase(),
-                pricing_source: "live_quote",
-                amount_out: formatUnits(amountOut, outToken.decimals),
-                fee_bps: fee / 100,
-                gas_estimate: gasEstimate.toString(),
-                ...createQuoteWindow(quotedAt, 30),
-              },
-            },
+            timestamp: quote.route.quoted_at,
+            data: quote,
             warnings: ["quote_expires"],
           }),
         );
@@ -724,11 +680,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
     .action(async (opts: { plan: string; confirmPlanId?: string; password?: string }) => {
       try {
         const plan = await loadPreparedPlan(opts.plan);
-        if (plan.data.action !== "defi.supply") {
-          throw new Error(`Prepared plan action '${plan.data.action}' cannot be executed by defi.supply.execute.`);
-        }
-        requireConfirmedExecution(plan, opts.confirmPlanId);
-
+        assertExecutableDefiPlan(plan, "defi.supply", "defi.supply.execute", opts.confirmPlanId);
         const config = loadConfig();
         const resolved = resolveEvmChainRef(plan.chain, config.environment);
         const walletName = plan.data.params.from;
@@ -759,29 +711,15 @@ export function registerTopLevelDefiCommand(program: Command): void {
           chain: getViemChain(resolved.chain, resolved.network),
           transport: http(rpcUrl),
         });
-
-        const steps = ((plan.data.intent as { steps?: Array<Record<string, unknown>> }).steps ?? []).map((step) => ({
-          step: String(step.step),
-          to: String(step.to) as `0x${string}`,
-          data: String(step.data) as `0x${string}`,
-          value: BigInt(String(step.value ?? "0")),
-        }));
-
         const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
-        const results: Array<{ step: string; tx_hash: `0x${string}`; status: string }> = [];
-        for (const step of steps) {
-          const txHash = await walletClient.sendTransaction({
-            to: step.to,
-            data: step.data,
-            value: step.value,
-          });
-          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-          const status = receipt.status === "success" ? "success" : "reverted";
-          results.push({ step: step.step, tx_hash: txHash, status });
-          if (receipt.status !== "success") {
-            throw new Error(`Step "${step.step}" reverted (tx: ${txHash}). Aborting remaining steps.`);
-          }
-        }
+        const results = await executePreparedDefiPlan({
+          callerLabel: "defi.supply.execute",
+          expectedAction: "defi.supply",
+          plan,
+          walletClient,
+          publicClient,
+          confirmPlanId: opts.confirmPlanId,
+        });
 
         emitEnvelope(
           createSuccessEnvelope({
