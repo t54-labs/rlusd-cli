@@ -163,9 +163,11 @@ Contract guarantees for skill consumers:
 - `--json` returns one shared envelope with `ok`, `command`, `chain`, `timestamp`, `warnings`, and `next`.
 - Write flows use `prepare -> review -> execute`; execution requires a matching `--confirm-plan-id` when the plan is confirmation-gated.
 - Explicit wallet flags are preferred over implicit defaults for write paths: `--from-wallet`, `--owner-wallet`, and `--wallet`.
-- Top-level `defi` commands always require an explicit `--chain`, and all swap or LP flows require an explicit `--venue`.
+- For predictable automation, prefer passing explicit `--chain` on top-level `defi` commands. If omitted, the CLI can also resolve the chain from the global flag or `default_chain` config.
+- `defi quote swap`, `defi swap prepare`, `defi lp preview`, and `defi lp prepare` take explicit `--venue`; swap and LP execute commands read the venue from the stored plan instead.
 - `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`) plus `route.venue`.
-- `defi swap prepare|execute` and `defi lp preview|prepare|execute` share the same prepared-plan contract as other write flows.
+- `defi swap prepare|execute` and `defi lp prepare|execute` share the same prepared-plan contract as other write flows.
+- `defi lp preview` is preview-only and returns quote-style data, not `plan_id`, `plan_path`, or `intent.steps`.
 - Curve support in this batch is intentionally narrow: Ethereum mainnet only, RLUSD/USDC only, and LP add/remove semantics are fixed to `--operation add` with both token amounts or `--operation remove` with `--lp-amount` plus `--receive-token`.
 
 ---

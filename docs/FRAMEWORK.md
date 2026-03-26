@@ -835,11 +835,13 @@ rlusd defi supply execute ...
 #### 3.7.3 Write-Path Rules
 
 - Write commands prefer explicit wallet flags: `--from-wallet`, `--owner-wallet`, and `--wallet`.
-- Top-level `defi` commands require an explicit `--chain`; swap and LP flows also require an explicit `--venue`.
+- For predictable automation, prefer passing explicit `--chain` on top-level `defi` commands. If omitted, the CLI can also resolve the chain from the global flag or `default_chain` config.
+- `defi quote swap`, `defi swap prepare`, `defi lp preview`, and `defi lp prepare` take explicit `--venue`; swap and LP execute commands read the venue from the stored plan instead.
 - Prepared plans are stored under `~/.config/rlusd-cli/plans/`.
 - Mainnet-gated plans require `--confirm-plan-id` that matches the stored `plan_id`.
 - `defi quote swap` is live quote data and returns freshness metadata: `quoted_at`, `ttl_seconds`, and `expires_at`.
-- `defi swap prepare|execute` and `defi lp preview|prepare|execute` use the same deterministic `intent.steps[]` plan pattern as other prepared write flows.
+- `defi swap prepare|execute` and `defi lp prepare|execute` use the same deterministic `intent.steps[]` plan pattern as other prepared write flows.
+- `defi lp preview` is preview-only and returns quote-style data, not `plan_id`, `plan_path`, or `intent.steps`.
 - Curve routing in this batch is pinned to `ethereum-mainnet` RLUSD/USDC, and LP semantics are fixed to add with both token amounts or remove with `--lp-amount` plus `--receive-token`.
 
 ---
