@@ -147,7 +147,7 @@ rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
 
 # DeFi discovery and execution
 rlusd defi venues --chain ethereum-mainnet --capability swap,lend,lp --json
-rlusd defi quote swap --chain ethereum-mainnet --from RLUSD --to USDC --amount 1000 --json
+rlusd defi quote swap --chain ethereum-mainnet --venue uniswap --from RLUSD --to USDC --amount 1000 --json
 rlusd defi supply preview --chain ethereum-mainnet --venue aave --amount 5000 --json
 rlusd defi supply prepare --chain ethereum-mainnet --venue aave --from-wallet ops --amount 5000 --json
 rlusd defi supply execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
@@ -563,19 +563,20 @@ Sell RLUSD for another token.
 ```bash
 # Sell 500 RLUSD for USDC
 export RLUSD_WALLET_PASSWORD=s3cret
-rlusd eth swap sell --amount 500 --for USDC
+rlusd eth swap sell --amount 500 --for USDC --venue uniswap
 
 # Sell with custom slippage and fee tier
-rlusd eth swap sell --amount 100 --for WETH --slippage 100 --fee-tier 3000
+rlusd eth swap sell --amount 100 --for WETH --venue uniswap --slippage 100 --fee-tier 3000
 
 # Preview without executing
-rlusd eth swap sell --amount 500 --for USDC --dry-run
+rlusd eth swap sell --amount 500 --for USDC --venue uniswap --dry-run
 ```
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--amount <n>` | **(required)** RLUSD amount to sell | — |
 | `--for <token>` | **(required)** Token to receive (`USDC`, `USDT`, `WETH`, `DAI`, `WBTC`) | — |
+| `--venue <venue>` | **(required)** Venue name (currently only `uniswap`) | — |
 | `--slippage <bps>` | Max slippage in basis points | `50` (0.5%) |
 | `--fee-tier <fee>` | Uniswap pool fee: `100`, `500`, `3000`, `10000` | `3000` (0.3%) |
 | `--password <pwd>` | Wallet decryption password (prefer `RLUSD_WALLET_PASSWORD`) | — |
@@ -591,10 +592,10 @@ Buy RLUSD with another token.
 
 ```bash
 # Buy 1000 RLUSD, paying with USDC
-rlusd eth swap buy --amount 1000 --with USDC
+rlusd eth swap buy --amount 1000 --with USDC --venue uniswap
 
 # Buy RLUSD with WETH
-rlusd eth swap buy --amount 500 --with WETH
+rlusd eth swap buy --amount 500 --with WETH --venue uniswap
 ```
 
 #### `rlusd eth swap quote`
@@ -602,8 +603,8 @@ rlusd eth swap buy --amount 500 --with WETH
 Get a price quote without executing a transaction.
 
 ```bash
-rlusd eth swap quote --amount 500 --for USDC
-rlusd eth swap quote --amount 1000 --for WETH --fee-tier 500
+rlusd eth swap quote --amount 500 --for USDC --venue uniswap
+rlusd eth swap quote --amount 1000 --for WETH --venue uniswap --fee-tier 500
 ```
 
 #### `rlusd eth swap tokens`
