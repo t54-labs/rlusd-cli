@@ -123,6 +123,42 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(output).toMatch(/sEd|^.*Seed: s/m);
   });
 
+  it("should show a clear error when export-seed password is wrong", () => {
+    const gen = createProgram();
+    gen.exitOverride();
+    gen.parse(
+      [
+        "wallet",
+        "generate",
+        "--chain",
+        "xrpl",
+        "--name",
+        "seed-wrong-password",
+        "--password",
+        "correct-password",
+        "--no-store-in-keychain",
+      ],
+      { from: "user" },
+    );
+
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(
+      [
+        "wallet",
+        "export-seed",
+        "--wallet",
+        "seed-wrong-password",
+        "--password",
+        "wrong-password",
+      ],
+      { from: "user" },
+    );
+    const output = consoleOutput.join("\n");
+    expect(output).toContain("does not decrypt wallet");
+  });
+
   it("should switch default wallet with 'wallet use'", () => {
     const gen1 = createProgram();
     gen1.exitOverride();

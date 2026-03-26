@@ -5,7 +5,13 @@ import {
   importXrplWalletFromSecret,
   serializeXrplWallet,
 } from "../wallet/xrpl-wallet.js";
-import { generateEvmWallet, importEvmWalletFromPrivateKey, importEvmWalletFromMnemonic, serializeEvmWallet } from "../wallet/evm-wallet.js";
+import {
+  decryptEvmPrivateKey,
+  generateEvmWallet,
+  importEvmWalletFromPrivateKey,
+  importEvmWalletFromMnemonic,
+  serializeEvmWallet,
+} from "../wallet/evm-wallet.js";
 import { saveWallet, listWallets, getDefaultWallet, setDefaultWallet } from "../wallet/manager.js";
 import { loadConfig, getWalletsDir } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
@@ -17,7 +23,12 @@ import {
   storeWalletPasswordInKeychain,
   supportsSystemKeychain,
 } from "../utils/keychain.js";
-import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import type {
+  ChainName,
+  OutputFormat,
+  EvmChainName,
+  StoredWallet,
+} from "../types/index.js";
 
 export function registerWalletCommand(program: Command): void {
   const walletCmd = program.command("wallet").description("Wallet generation, import, and management");
@@ -40,6 +51,23 @@ export function registerWalletCommand(program: Command): void {
       );
     }
     storeWalletPasswordInKeychain(walletName, password);
+  }
+
+  function assertWalletPasswordValid(
+    wallet: StoredWallet,
+    password: string,
+  ): void {
+    try {
+      if (wallet.chain === "xrpl") {
+        decryptXrplSecret(wallet, password);
+      } else {
+        decryptEvmPrivateKey(wallet, password);
+      }
+    } catch {
+      throw new Error(
+        `The provided password does not decrypt wallet '${wallet.name}'.`,
+      );
+    }
   }
 
   walletCmd
@@ -290,7 +318,14 @@ export function registerWalletCommand(program: Command): void {
         const password = resolveWalletPassword(opts.password, {
           walletName: wallet.name,
         });
-        const seed = decryptXrplSecret(wallet, password);
+        let seed: string;
+        try {
+          seed = decryptXrplSecret(wallet, password);
+        } catch {
+          throw new Error(
+            `The provided password does not decrypt wallet '${wallet.name}'. If you enabled Keychain, re-run 'rlusd wallet keychain enable ${wallet.name} --password <correct-password>' to update it.`,
+          );
+        }
         const outputFormat =
           (program.opts().output as OutputFormat) || loadConfig().output_format;
 
@@ -357,6 +392,11 @@ export function registerWalletCommand(program: Command): void {
           throw new Error(`Wallet '${name}' does not exist.`);
         }
         const password = resolveWalletPassword(opts.password);
+        const wallet = listWallets().find((entry) => entry.name === name);
+        if (!wallet) {
+          throw new Error(`Wallet '${name}' does not exist.`);
+        }
+        assertWalletPasswordValid(wallet, password);
         storeWalletPasswordInKeychain(name, password);
         logger.success(`Stored password for wallet '${name}' in macOS Keychain`);
       } catch (err) {
