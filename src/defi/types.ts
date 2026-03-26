@@ -1,5 +1,5 @@
 import type { ResolvedEvmChainRef } from "../clients/evm-client.js";
-import type { AppConfig, DefiVenueName } from "../types/index.js";
+import type { AppConfig, DefiVenueName, ResolvedAsset } from "../types/index.js";
 
 export type DefiIntentStep = {
   step: string;
@@ -29,13 +29,16 @@ export type DefiSwapQuoteResult = {
     ttl_seconds: number;
     expires_at: string;
     fee_bps?: number;
+    pool_name?: string;
+    pool_address?: `0x${string}`;
   };
 };
 
 export type QuotePublicClient = {
-  simulateContract: (args: unknown) => Promise<{
+  simulateContract?: (args: unknown) => Promise<{
     result: readonly [bigint, bigint, number, bigint];
   }>;
+  readContract?: (args: unknown) => Promise<bigint>;
 };
 
 export type DefiSwapQuoteRequest = {
@@ -48,10 +51,41 @@ export type DefiSwapQuoteRequest = {
   publicClient?: QuotePublicClient;
 };
 
+export type DefiSwapPlanIntent = {
+  venue: DefiVenueName;
+  from_symbol: string;
+  to_symbol: string;
+  amount_in: string;
+  expected_amount_out: string;
+  min_amount_out: string;
+  steps: DefiIntentStep[];
+};
+
+export type DefiSwapPlanRequest = {
+  chain: ResolvedEvmChainRef;
+  config: AppConfig;
+  walletName: string;
+  walletAddress: `0x${string}`;
+  fromSymbol: string;
+  toSymbol: string;
+  amount: string;
+  slippageBps: number;
+  feeTier?: string;
+  publicClient?: QuotePublicClient;
+};
+
+export type DefiSwapPlanResult = {
+  asset: ResolvedAsset;
+  human_summary: string;
+  params: Record<string, string>;
+  intent: DefiSwapPlanIntent;
+  warnings: string[];
+};
+
 export type DefiVenueAdapter = {
   venue: DefiVenueName;
   quoteSwap: (input: DefiSwapQuoteRequest) => Promise<DefiSwapQuoteResult>;
-  buildSwapPlan: (input: unknown) => Promise<unknown>;
+  buildSwapPlan: (input: DefiSwapPlanRequest) => Promise<DefiSwapPlanResult>;
   previewLp: (input: unknown) => Promise<unknown>;
   buildLpPlan: (input: unknown) => Promise<unknown>;
 };

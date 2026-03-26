@@ -12,6 +12,7 @@ import { formatOutput } from "../../utils/format.js";
 import type { EvmChainName, OutputFormat, StoredEvmWallet, ResolvedAsset } from "../../types/index.js";
 import { AAVE_V3_POOL_ETHEREUM } from "../../config/constants.js";
 import type { AppConfig } from "../../types/index.js";
+import { getPreparePolicy } from "../../policy/index.js";
 
 function resolveAavePool(chain: EvmChainName, config: AppConfig): `0x${string}` {
   return (config.contracts?.[chain]?.aave_v3_pool || AAVE_V3_POOL_ETHEREUM) as `0x${string}`;
@@ -441,6 +442,14 @@ function parseCapabilityFilter(raw?: string): string[] {
     .filter(Boolean);
 }
 
+function parseSlippageBps(raw?: string): number {
+  const value = Number.parseInt(raw || "50", 10);
+  if (!Number.isInteger(value) || value < 0 || value > 5000) {
+    throw new Error("Invalid --slippage. Use basis points between 0 and 5000.");
+  }
+  return value;
+}
+
 function resolveDefiChain(opts: { chain?: string }, program: Command, config: ReturnType<typeof loadConfig>): string {
   const raw = opts.chain || program.opts().chain || config.default_chain;
   if (!raw) {
@@ -529,6 +538,166 @@ export function registerTopLevelDefiCommand(program: Command): void {
             timestamp: new Date().toISOString(),
             code: "QUOTE_UNAVAILABLE",
             message: error instanceof Error ? error.message : "Unable to fetch live quote.",
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  const swapCmd = defiCmd.command("swap").description("Prepared RLUSD swap flows");
+  swapCmd
+    .command("prepare")
+    .description("Prepare a DeFi swap flow")
+    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--venue <venue>", "venue name")
+    .requiredOption("--from-wallet <name>", "wallet name to swap from")
+    .requiredOption("--from <symbol>", "source asset symbol")
+    .requiredOption("--to <symbol>", "destination asset symbol")
+    .requiredOption("--amount <amount>", "amount of source asset")
+    .option("--slippage <bps>", "max slippage in basis points", "50")
+    .option("--fee-tier <fee>", "Uniswap pool fee tier", "3000")
+    .action(async (opts: {
+      chain?: string;
+      venue: string;
+      fromWallet: string;
+      from: string;
+      to: string;
+      amount: string;
+      slippage?: string;
+      feeTier?: string;
+    }) => {
+      const config = loadConfig();
+      try {
+        const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const walletData = resolveWalletForChain(resolved.chain, {
+          walletName: opts.fromWallet,
+          optionName: "--from-wallet",
+        });
+        if (isXrplWallet(walletData)) {
+          throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
+        }
+
+        const adapter = getDefiVenueAdapter(opts.venue);
+        const swapPlan = await adapter.buildSwapPlan({
+          chain: resolved,
+          config,
+          walletName: opts.fromWallet,
+          walletAddress: walletData.address as `0x${string}`,
+          fromSymbol: opts.from,
+          toSymbol: opts.to,
+          amount: opts.amount,
+          slippageBps: parseSlippageBps(opts.slippage),
+          feeTier: opts.feeTier,
+        });
+        const policy = getPreparePolicy(resolved.label, "defi.swap");
+        const plan = await createPreparedPlan({
+          command: "defi.swap.prepare",
+          chain: resolved.label,
+          timestamp: new Date().toISOString(),
+          action: "defi.swap",
+          requires_confirmation: policy.requires_confirmation,
+          human_summary: swapPlan.human_summary,
+          asset: swapPlan.asset,
+          params: swapPlan.params,
+          intent: swapPlan.intent,
+          warnings: [...new Set([...policy.warnings, ...swapPlan.warnings])],
+        });
+
+        emitEnvelope(plan);
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "defi.swap.prepare",
+            timestamp: new Date().toISOString(),
+            code: "PREPARE_FAILED",
+            message: error instanceof Error ? error.message : "Unable to prepare swap flow.",
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  swapCmd
+    .command("execute")
+    .description("Execute a prepared DeFi swap flow")
+    .requiredOption("--plan <path>", "path to a prepared plan file")
+    .option("--confirm-plan-id <planId>", "explicit confirmation matching the prepared plan id")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
+    .action(async (opts: { plan: string; confirmPlanId?: string; password?: string }) => {
+      try {
+        const plan = await loadPreparedPlan(opts.plan);
+        assertExecutableDefiPlan(plan, "defi.swap", "defi.swap.execute", opts.confirmPlanId);
+        const config = loadConfig();
+        const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const walletName = plan.data.params.from;
+        if (!walletName) {
+          throw new Error("Prepared plan is missing swap sender.");
+        }
+        const walletData = resolveWalletForChain(resolved.chain, {
+          walletName,
+          optionName: "--from-wallet",
+        });
+        if (isXrplWallet(walletData)) {
+          throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
+        }
+
+        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        if (!rpcUrl) {
+          throw new Error(`RPC not configured for ${resolved.chain}`);
+        }
+
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
+        const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
+        const account = privateKeyToAccount(privateKey as `0x${string}`);
+        const walletClient = createWalletClient({
+          account,
+          chain: getViemChain(resolved.chain, resolved.network),
+          transport: http(rpcUrl),
+        });
+        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
+        const results = await executePreparedDefiPlan({
+          callerLabel: "defi.swap.execute",
+          expectedAction: "defi.swap",
+          plan,
+          walletClient,
+          publicClient,
+          confirmPlanId: opts.confirmPlanId,
+        });
+
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "defi.swap.execute",
+            chain: plan.chain,
+            timestamp: new Date().toISOString(),
+            data: {
+              plan_id: plan.data.plan_id,
+              plan_path: opts.plan,
+              action: plan.data.action,
+              steps: results,
+            },
+            warnings: plan.warnings,
+          }),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to execute prepared swap flow.";
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "defi.swap.execute",
+            timestamp: new Date().toISOString(),
+            code:
+              message.includes("explicit confirmation")
+                ? "CONFIRMATION_REQUIRED"
+                : message.includes("deterministic plan id")
+                  ? "PLAN_INTEGRITY_MISMATCH"
+                  : "EXECUTION_FAILED",
+            message,
           }),
         );
         process.exitCode = 1;

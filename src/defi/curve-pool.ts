@@ -4,6 +4,7 @@ import {
   WELL_KNOWN_TOKENS,
 } from "../config/constants.js";
 import type { AppConfig } from "../types/index.js";
+import { logger } from "../utils/logger.js";
 
 export type CurvePoolCoin = {
   symbol: "USDC" | "RLUSD";
@@ -45,8 +46,17 @@ export function resolveCurvePool(chainLabel: string, config: AppConfig): CurvePo
     throw new Error("Curve RLUSD-USDC routing is only supported on ethereum-mainnet.");
   }
 
-  const address = (config.contracts?.ethereum?.curve_rlusd_usdc_pool ||
-    CURVE_RLUSD_USDC_POOL_ETHEREUM) as `0x${string}`;
+  const override = config.contracts?.ethereum?.curve_rlusd_usdc_pool;
+  const address = (override || CURVE_RLUSD_USDC_POOL_ETHEREUM) as `0x${string}`;
+
+  if (override && override.toLowerCase() !== CURVE_RLUSD_USDC_POOL_ETHEREUM.toLowerCase()) {
+    logger.warn(
+      `Using config override for Curve pool (${override}). ` +
+      "Coin list, coin indices, and LP-token assumptions are still based on the " +
+      `canonical RLUSD/USDC pool (${CURVE_RLUSD_USDC_POOL_ETHEREUM}). ` +
+      "If the override points at a different pool layout, swaps and LP operations will produce wrong calldata.",
+    );
+  }
 
   return {
     venue: "curve",

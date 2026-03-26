@@ -310,6 +310,49 @@ describe("Config System", () => {
         RLUSD: 1,
       });
     });
+
+    it("should use config override address and warn about metadata assumptions", () => {
+      const override = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF";
+      const config = loadConfig();
+      config.contracts = { ethereum: { curve_rlusd_usdc_pool: override } };
+      saveConfig(config);
+
+      const warnSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const reloaded = loadConfig();
+        const pool = resolveCurvePool("ethereum-mainnet", reloaded);
+
+        expect(pool.address).toBe(override);
+        expect(pool.lpTokenAddress).toBe(override);
+        expect(pool.coins.map((c) => c.symbol)).toEqual(["USDC", "RLUSD"]);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.stringContaining("config override"),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("should not warn when override matches the canonical address", () => {
+      const config = loadConfig();
+      config.contracts = { ethereum: { curve_rlusd_usdc_pool: CURVE_RLUSD_USDC_POOL_ETHEREUM } };
+      saveConfig(config);
+
+      const warnSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const reloaded = loadConfig();
+        const pool = resolveCurvePool("ethereum-mainnet", reloaded);
+
+        expect(pool.address).toBe(CURVE_RLUSD_USDC_POOL_ETHEREUM);
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.stringContaining("config override"),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
 });

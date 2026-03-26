@@ -194,6 +194,42 @@ describe("Command Registration", () => {
     expect(stdout.length).toBeGreaterThan(0);
   });
 
+  it("should reject config set --curve-rlusd-usdc-pool for non-ethereum chains", () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(
+        [
+          "config",
+          "set",
+          "--chain",
+          "base",
+          "--curve-rlusd-usdc-pool",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr.join(" ")).toContain("only supported for --chain ethereum");
+    expect(process.exitCode).toBe(1);
+    process.exitCode = undefined as unknown as number;
+  });
+
   it("should register balance command with options", () => {
     const program = createProgram();
     const balanceCmd = program.commands.find((c) => c.name() === "balance");
@@ -918,6 +954,16 @@ describe("DeFi Command Registration", () => {
 
     const subcommands = supplyCmd!.commands.map((c) => c.name());
     expect(subcommands).toContain("preview");
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register defi swap prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const swapCmd = getSubcommand(defiCmd, "swap");
+
+    const subcommands = swapCmd.commands.map((c) => c.name());
     expect(subcommands).toContain("prepare");
     expect(subcommands).toContain("execute");
   });

@@ -53,6 +53,9 @@ export async function quoteUniswapSwap(input: DefiSwapQuoteRequest): Promise<Def
 
   const publicClient =
     input.publicClient ?? getEvmPublicClient(input.chain.chain, input.chain.network);
+  if (!publicClient.simulateContract) {
+    throw new Error("Venue uniswap requires a client with simulateContract support.");
+  }
   const amountIn = parseUnits(input.amount, input.config.rlusd.eth_decimals);
   const fee = parseFeeTier(input.feeTier);
   const quoteResult = await publicClient.simulateContract({
