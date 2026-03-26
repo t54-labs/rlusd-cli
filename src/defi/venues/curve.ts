@@ -21,10 +21,6 @@ import type {
 type SupportedCurveSymbol = "RLUSD" | "USDC";
 const CURVE_LP_DECIMALS = 18;
 
-function unsupported(method: string): never {
-  throw new Error(`Venue curve does not support ${method} in this batch.`);
-}
-
 function resolveCurveSwapPair(input: {
   chainLabel: string;
   config: DefiSwapQuoteRequest["config"];

@@ -10,14 +10,13 @@ import { UNISWAP_V3_ROUTER_ABI, UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-
 import { WELL_KNOWN_TOKENS } from "../../config/constants.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { AppConfig, EvmChainName, LoadedPreparedPlan, OutputFormat, StoredEvmWallet } from "../../types/index.js";
+import type { EvmChainName, LoadedPreparedPlan, OutputFormat, StoredEvmWallet } from "../../types/index.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 import { executePreparedDefiPlan } from "../../defi/executor.js";
 import { getDefiVenueAdapter } from "../../defi/venues/index.js";
 import {
   parseFeeTier,
-  quoteUniswapSwap,
   resolveTokenAddress,
   resolveUniswapQuoter,
   resolveUniswapRouter,
