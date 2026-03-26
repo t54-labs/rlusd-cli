@@ -366,6 +366,64 @@ describe("Agent JSON Contract", () => {
     expect(envelope.error.message).toContain("Wallet password is required");
   });
 
+  it("should reject evm transfer prepare when --from-wallet does not exist", async () => {
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "evm",
+        "transfer",
+        "prepare",
+        "--chain",
+        "ethereum-mainnet",
+        "--from-wallet",
+        "missing-wallet",
+        "--to",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "10",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe("evm.transfer.prepare");
+    expect(envelope.error.code).toBe("PREPARE_FAILED");
+    expect(envelope.error.message).toContain("does not exist");
+  });
+
+  it("should reject evm approve prepare when --owner-wallet does not exist", async () => {
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "evm",
+        "approve",
+        "prepare",
+        "--chain",
+        "ethereum-mainnet",
+        "--owner-wallet",
+        "missing-wallet",
+        "--spender",
+        "0x0000000000000000000000000000000000000001",
+        "--amount",
+        "10",
+      ],
+      { from: "user" },
+    );
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe("evm.approve.prepare");
+    expect(envelope.error.code).toBe("PREPARE_FAILED");
+    expect(envelope.error.message).toContain("does not exist");
+  });
+
   it("should return structured asset resolution data with --json", () => {
     const program = createProgram();
     program.exitOverride();
@@ -379,6 +437,21 @@ describe("Agent JSON Contract", () => {
     expect(envelope.command).toBe("resolve asset");
     expect(envelope.data.symbol).toBe("RLUSD");
     expect(envelope.data.chain).toBe("ethereum-mainnet");
+  });
+
+  it("should reject resolve asset for unsupported EVM chains with --json", () => {
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "resolve", "asset", "--chain", "base-mainnet", "--symbol", "RLUSD"], {
+      from: "user",
+    });
+
+    expect(stdout).toEqual([]);
+    const envelope = JSON.parse(stderr.join("\n"));
+    expect(envelope.ok).toBe(false);
+    expect(envelope.command).toBe("resolve asset");
+    expect(envelope.error.code).toBe("UNSUPPORTED_CHAIN");
+    expect(envelope.error.message).toContain("RLUSD on base is not enabled");
   });
 
   it("should return fiat onboarding checklist guidance with --json", () => {

@@ -1,9 +1,11 @@
 import { Command } from "commander";
 
+import { createErrorEnvelope } from "../agent/envelope.js";
 import { loadConfig } from "../config/config.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
-import type { ChainName, OutputFormat } from "../types/index.js";
+import type { ChainName, EvmChainName, OutputFormat } from "../types/index.js";
+import { assertActiveRlusdEvmChain } from "../utils/evm-support.js";
 
 type ResolvedAssetRecord = {
   symbol: string;
@@ -42,6 +44,8 @@ function resolveRlusdAsset(chainLabel: string, config: ReturnType<typeof loadCon
     };
   }
 
+  assertActiveRlusdEvmChain(chainLabel.split("-")[0] as EvmChainName);
+
   return {
     symbol: "RLUSD",
     name: "Ripple USD",
@@ -51,6 +55,33 @@ function resolveRlusdAsset(chainLabel: string, config: ReturnType<typeof loadCon
     address_type: "proxy",
     decimals: config.rlusd.eth_decimals,
   };
+}
+
+function emitResolveError(input: {
+  outputFormat: OutputFormat;
+  command: string;
+  chain?: string;
+  code: string;
+  message: string;
+}): void {
+  if (input.outputFormat === "json" || input.outputFormat === "json-compact") {
+    console.error(
+      JSON.stringify(
+        createErrorEnvelope({
+          command: input.command,
+          chain: input.chain,
+          timestamp: new Date().toISOString(),
+          code: input.code,
+          message: input.message,
+        }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  logger.error(input.message);
 }
 
 export function registerResolveCommand(program: Command): void {
@@ -67,25 +98,52 @@ export function registerResolveCommand(program: Command): void {
       const symbol = (opts.symbol || "RLUSD").toUpperCase();
 
       if (symbol !== "RLUSD") {
-        logger.error(`Unsupported symbol: ${symbol}. This command currently resolves RLUSD only.`);
+        emitResolveError({
+          outputFormat,
+          command: "resolve asset",
+          code: "INVALID_ARGUMENT",
+          message: `Unsupported symbol: ${symbol}. This command currently resolves RLUSD only.`,
+        });
         process.exitCode = 1;
         return;
       }
 
       const chainInput = opts.chain || (program.opts().chain as string | undefined);
       if (!chainInput) {
-        logger.error("The --chain option is required.");
+        emitResolveError({
+          outputFormat,
+          command: "resolve asset",
+          code: "MISSING_REQUIRED_ARGUMENT",
+          message: "The --chain option is required.",
+        });
         process.exitCode = 1;
         return;
       }
       const chainLabel = normalizeChainLabel(chainInput, config.environment);
       if (!chainLabel) {
-        logger.error(`Invalid chain: ${chainInput}. Valid: ${VALID_CHAINS.join(", ")}`);
+        emitResolveError({
+          outputFormat,
+          command: "resolve asset",
+          chain: chainInput,
+          code: "INVALID_ARGUMENT",
+          message: `Invalid chain: ${chainInput}. Valid: ${VALID_CHAINS.join(", ")}`,
+        });
         process.exitCode = 1;
         return;
       }
-      const data = resolveRlusdAsset(chainLabel, config);
+      try {
+        const data = resolveRlusdAsset(chainLabel, config);
 
-      logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
+        logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
+      } catch (error) {
+        emitResolveError({
+          outputFormat,
+          command: "resolve asset",
+          chain: chainLabel,
+          code: "UNSUPPORTED_CHAIN",
+          message: error instanceof Error ? error.message : "Unable to resolve asset metadata.",
+        });
+        process.exitCode = 1;
+      }
     });
 }
