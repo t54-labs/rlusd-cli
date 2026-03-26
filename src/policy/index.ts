@@ -22,6 +22,8 @@ export function getPreparePolicy(chain: string, action: PrepareAction): PrepareP
         warnings: ["mainnet", "token_allowance"],
       };
     case "defi.supply":
+    case "defi.swap":
+    case "defi.lp":
       return {
         requires_confirmation: true,
         warnings: ["mainnet", "real_funds", "token_allowance"],

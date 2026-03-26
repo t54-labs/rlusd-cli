@@ -147,7 +147,13 @@ rlusd xrpl payment receipt --chain xrpl-mainnet --hash ABC... --json
 
 # DeFi discovery and execution
 rlusd defi venues --chain ethereum-mainnet --capability swap,lend,lp --json
-rlusd defi quote swap --chain ethereum-mainnet --from RLUSD --to USDC --amount 1000 --json
+rlusd defi quote swap --chain ethereum-mainnet --venue uniswap --from RLUSD --to USDC --amount 1000 --json
+rlusd defi quote swap --chain ethereum-mainnet --venue curve --from RLUSD --to USDC --amount 1000 --json
+rlusd defi swap prepare --chain ethereum-mainnet --venue curve --from-wallet ops --from RLUSD --to USDC --amount 1000 --slippage 50 --json
+rlusd defi swap execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
+rlusd defi lp preview --chain ethereum-mainnet --venue curve --operation add --rlusd-amount 1000 --usdc-amount 1000 --json
+rlusd defi lp prepare --chain ethereum-mainnet --venue curve --operation remove --from-wallet ops --lp-amount 50 --receive-token RLUSD --json
+rlusd defi lp execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
 rlusd defi supply preview --chain ethereum-mainnet --venue aave --amount 5000 --json
 rlusd defi supply prepare --chain ethereum-mainnet --venue aave --from-wallet ops --amount 5000 --json
 rlusd defi supply execute --plan ~/.config/rlusd-cli/plans/plan_x.json --confirm-plan-id plan_x --password "$RLUSD_WALLET_PASSWORD" --json
@@ -157,7 +163,12 @@ Contract guarantees for skill consumers:
 - `--json` returns one shared envelope with `ok`, `command`, `chain`, `timestamp`, `warnings`, and `next`.
 - Write flows use `prepare -> review -> execute`; execution requires a matching `--confirm-plan-id` when the plan is confirmation-gated.
 - Explicit wallet flags are preferred over implicit defaults for write paths: `--from-wallet`, `--owner-wallet`, and `--wallet`.
-- `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`).
+- For predictable automation, prefer passing explicit `--chain` on top-level `defi` commands. If omitted, the CLI can also resolve the chain from the global flag or `default_chain` config.
+- `defi quote swap`, `defi swap prepare`, `defi lp preview`, and `defi lp prepare` take explicit `--venue`; swap and LP execute commands read the venue from the stored plan instead.
+- `defi quote swap` is live quote data and includes freshness metadata (`quoted_at`, `ttl_seconds`, `expires_at`) plus `route.venue`.
+- `defi swap prepare|execute` and `defi lp prepare|execute` share the same prepared-plan contract as other write flows.
+- `defi lp preview` is preview-only and returns quote-style data, not `plan_id`, `plan_path`, or `intent.steps`.
+- Curve support in this batch is intentionally narrow: Ethereum mainnet only, RLUSD/USDC only, and LP add/remove semantics are fixed to `--operation add` with both token amounts or `--operation remove` with `--lp-amount` plus `--receive-token`.
 
 ---
 
@@ -570,19 +581,20 @@ Sell RLUSD for another token.
 ```bash
 # Sell 500 RLUSD for USDC
 export RLUSD_WALLET_PASSWORD=s3cret
-rlusd eth swap sell --amount 500 --for USDC
+rlusd eth swap sell --amount 500 --for USDC --venue uniswap
 
 # Sell with custom slippage and fee tier
-rlusd eth swap sell --amount 100 --for WETH --slippage 100 --fee-tier 3000
+rlusd eth swap sell --amount 100 --for WETH --venue uniswap --slippage 100 --fee-tier 3000
 
 # Preview without executing
-rlusd eth swap sell --amount 500 --for USDC --dry-run
+rlusd eth swap sell --amount 500 --for USDC --venue uniswap --dry-run
 ```
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--amount <n>` | **(required)** RLUSD amount to sell | — |
 | `--for <token>` | **(required)** Token to receive (`USDC`, `USDT`, `WETH`, `DAI`, `WBTC`) | — |
+| `--venue <venue>` | **(required)** Venue name (currently only `uniswap`) | — |
 | `--slippage <bps>` | Max slippage in basis points | `50` (0.5%) |
 | `--fee-tier <fee>` | Uniswap pool fee: `100`, `500`, `3000`, `10000` | `3000` (0.3%) |
 | `--password <pwd>` | Wallet decryption password (prefer `RLUSD_WALLET_PASSWORD`) | — |
@@ -598,10 +610,10 @@ Buy RLUSD with another token.
 
 ```bash
 # Buy 1000 RLUSD, paying with USDC
-rlusd eth swap buy --amount 1000 --with USDC
+rlusd eth swap buy --amount 1000 --with USDC --venue uniswap
 
 # Buy RLUSD with WETH
-rlusd eth swap buy --amount 500 --with WETH
+rlusd eth swap buy --amount 500 --with WETH --venue uniswap
 ```
 
 #### `rlusd eth swap quote`
@@ -609,8 +621,8 @@ rlusd eth swap buy --amount 500 --with WETH
 Get a price quote without executing a transaction.
 
 ```bash
-rlusd eth swap quote --amount 500 --for USDC
-rlusd eth swap quote --amount 1000 --for WETH --fee-tier 500
+rlusd eth swap quote --amount 500 --for USDC --venue uniswap
+rlusd eth swap quote --amount 1000 --for WETH --venue uniswap --fee-tier 500
 ```
 
 #### `rlusd eth swap tokens`

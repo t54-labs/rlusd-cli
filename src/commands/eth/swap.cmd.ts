@@ -4,37 +4,42 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadConfig } from "../../config/config.js";
 import { getDefaultWallet, isXrplWallet } from "../../wallet/manager.js";
 import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
-import { getEvmPublicClient, getViemChain } from "../../clients/evm-client.js";
+import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
 import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { UNISWAP_V3_ROUTER_ABI, UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-router.js";
-import {
-  UNISWAP_V3_SWAP_ROUTER,
-  UNISWAP_V3_QUOTER_V2,
-  WELL_KNOWN_TOKENS,
-} from "../../config/constants.js";
-import type { AppConfig } from "../../types/index.js";
+import { WELL_KNOWN_TOKENS } from "../../config/constants.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, OutputFormat, StoredEvmWallet } from "../../types/index.js";
+import type { EvmChainName, LoadedPreparedPlan, OutputFormat, StoredEvmWallet } from "../../types/index.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
+import { executePreparedDefiPlan } from "../../defi/executor.js";
+import { getDefiVenueAdapter } from "../../defi/venues/index.js";
+import {
+  parseFeeTier,
+  resolveTokenAddress,
+  resolveUniswapQuoter,
+  resolveUniswapRouter,
+} from "../../defi/venues/uniswap.js";
 
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 const DEFAULT_FEE_TIER = 3000; // 0.3% Uniswap pool fee
 
-export function resolveUniswapRouter(chain: EvmChainName, config: AppConfig): `0x${string}` {
-  return (config.contracts?.[chain]?.uniswap_router || UNISWAP_V3_SWAP_ROUTER) as `0x${string}`;
+function resolveVenueChainRef(
+  chain: EvmChainName,
+  venue: string,
+  config: ReturnType<typeof loadConfig>,
+) {
+  return resolveEvmChainRef(
+    chain,
+    venue.trim().toLowerCase() === "curve" ? "mainnet" : config.environment,
+  );
 }
 
-export function resolveUniswapQuoter(chain: EvmChainName, config: AppConfig): `0x${string}` {
-  return (config.contracts?.[chain]?.uniswap_quoter || UNISWAP_V3_QUOTER_V2) as `0x${string}`;
-}
-
-export function resolveTokenAddress(symbol: string): { address: string; decimals: number } | null {
-  const upper = symbol.toUpperCase();
-  const token = WELL_KNOWN_TOKENS[upper];
-  if (token) return { address: token.address, decimals: token.decimals };
-  return null;
+export function requireUniswapVenue(venue: string): void {
+  if (venue.trim().toLowerCase() !== "uniswap") {
+    throw new Error("Only --venue uniswap is supported for this command today.");
+  }
 }
 
 export function registerSwapCommand(parent: Command, program: Command): void {
@@ -45,6 +50,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Sell RLUSD for another token via Uniswap V3 exactInputSingle")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
     .requiredOption("--for <token>", "token to receive: USDC | USDT | WETH | DAI | WBTC")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
@@ -68,7 +74,12 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
-        await executeSwapSell(chain, opts, outToken, config, outputFormat);
+        if (opts.venue.trim().toLowerCase() === "uniswap") {
+          requireUniswapVenue(opts.venue);
+          await executeSwapSell(chain, opts, outToken, config, outputFormat);
+        } else {
+          await executeAdapterSell(chain, opts, config, outputFormat);
+        }
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
         process.exitCode = 1;
@@ -80,6 +91,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Buy RLUSD with another token via Uniswap V3")
     .requiredOption("--amount <n>", "RLUSD amount to buy")
     .requiredOption("--with <token>", "token to pay with: USDC | USDT | WETH | DAI | WBTC")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--slippage <bps>", "max slippage in basis points (default: 50 = 0.5%)", String(DEFAULT_SLIPPAGE_BPS))
     .option("--fee-tier <fee>", "Uniswap pool fee tier: 100 | 500 | 3000 | 10000", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
@@ -102,6 +114,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
+        requireUniswapVenue(opts.venue);
         await executeSwapBuy(chain, opts, inToken, config, outputFormat);
       } catch (err) {
         logger.error(`Swap failed: ${(err as Error).message}`);
@@ -114,6 +127,7 @@ export function registerSwapCommand(parent: Command, program: Command): void {
     .description("Get a quote for swapping RLUSD (no transaction submitted)")
     .requiredOption("--amount <n>", "RLUSD amount to sell")
     .requiredOption("--for <token>", "token to receive")
+    .requiredOption("--venue <venue>", "venue name")
     .option("--fee-tier <fee>", "Uniswap pool fee tier", String(DEFAULT_FEE_TIER))
     .option("-c, --chain <chain>", "EVM chain (default: ethereum)")
     .action(async (opts) => {
@@ -130,48 +144,40 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 
       try {
         assertActiveRlusdEvmChain(chain);
-        const publicClient = getEvmPublicClient(chain);
-        const rlusdAddress = getRlusdContractAddress(chain, config);
-        const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
-        const fee = parseFeeTier(opts.feeTier);
-
-        const result = await publicClient.simulateContract({
-          address: resolveUniswapQuoter(chain, config),
-          abi: UNISWAP_QUOTER_V2_ABI,
-          functionName: "quoteExactInputSingle",
-          args: [
-            {
-              tokenIn: rlusdAddress,
-              tokenOut: outToken.address as `0x${string}`,
-              amountIn,
-              fee,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
+        const quote = await getDefiVenueAdapter(opts.venue).quoteSwap({
+          chain: resolveVenueChainRef(chain, opts.venue, config),
+          config,
+          fromSymbol: "RLUSD",
+          toSymbol: opts.for,
+          amount: opts.amount,
+          feeTier: opts.feeTier,
         });
 
-        const [amountOut, , , gasEstimate] = result.result;
-        const formattedOut = formatUnits(amountOut, outToken.decimals);
-
         const data = {
+          venue: quote.route.venue,
           sell: `${opts.amount} RLUSD`,
-          receive: `~${formattedOut} ${opts.for.toUpperCase()}`,
-          fee_tier: `${fee / 10000}%`,
-          gas_estimate: gasEstimate.toString(),
+          receive: `~${quote.route.amount_out} ${opts.for.toUpperCase()}`,
+          gas_estimate: quote.route.gas_estimate,
+          ...(quote.route.fee_bps ? { fee_tier: `${quote.route.fee_bps / 100}%` } : {}),
         };
 
         if (outputFormat === "json" || outputFormat === "json-compact") {
           logger.raw(formatOutput(data, outputFormat));
         } else {
-          logger.success("Uniswap V3 Quote");
+          logger.success(`${String(quote.route.venue).toUpperCase()} Quote`);
+          logger.label("Venue", String(quote.route.venue));
           logger.label("Sell", `${opts.amount} RLUSD`);
-          logger.label("Receive (est.)", `${formattedOut} ${opts.for.toUpperCase()}`);
-          logger.label("Pool Fee", `${fee / 10000}%`);
-          logger.label("Gas Estimate", gasEstimate.toString());
+          logger.label("Receive (est.)", `${quote.route.amount_out} ${opts.for.toUpperCase()}`);
+          if (quote.route.fee_bps) {
+            logger.label("Pool Fee", `${quote.route.fee_bps / 100}%`);
+          }
+          logger.label("Gas Estimate", quote.route.gas_estimate);
         }
       } catch (err) {
         logger.error(`Quote failed: ${(err as Error).message}`);
-        logger.dim("This may mean no Uniswap pool exists for this pair/fee tier.");
+        if (opts.venue.trim().toLowerCase() === "uniswap") {
+          logger.dim("This may mean no Uniswap pool exists for this pair/fee tier.");
+        }
         process.exitCode = 1;
       }
     });
@@ -194,14 +200,6 @@ export function registerSwapCommand(parent: Command, program: Command): void {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyWalletClient = any;
 
-export function parseFeeTier(feeTier: string | undefined): number {
-  const fee = Number.parseInt(feeTier || String(DEFAULT_FEE_TIER), 10);
-  if (![100, 500, 3000, 10000].includes(fee)) {
-    throw new Error("Invalid --fee-tier. Supported values: 100, 500, 3000, 10000.");
-  }
-  return fee;
-}
-
 function parseSlippageBps(raw: string | undefined): number {
   const value = Number.parseInt(raw || String(DEFAULT_SLIPPAGE_BPS), 10);
   if (!Number.isInteger(value) || value < 0 || value > 5000) {
@@ -214,7 +212,12 @@ async function getWalletContext(
   chain: EvmChainName,
   password: string | undefined,
   config: ReturnType<typeof loadConfig>,
-): Promise<{ walletClient: AnyWalletClient; account: ReturnType<typeof privateKeyToAccount>; publicClient: ReturnType<typeof getEvmPublicClient> }> {
+): Promise<{
+  walletClient: AnyWalletClient;
+  account: ReturnType<typeof privateKeyToAccount>;
+  publicClient: ReturnType<typeof getEvmPublicClient>;
+  walletName: string;
+}> {
   const walletData = getDefaultWallet(chain);
   if (!walletData || isXrplWallet(walletData)) {
     throw new Error(`No EVM wallet for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
@@ -228,7 +231,82 @@ async function getWalletContext(
   const account = privateKeyToAccount(privateKey as `0x${string}`);
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(rpcUrl) });
   const publicClient = getEvmPublicClient(chain);
-  return { walletClient, account, publicClient };
+  return { walletClient, account, publicClient, walletName: walletData.name };
+}
+
+async function executeAdapterSell(
+  chain: EvmChainName,
+  opts: { venue: string; amount: string; for: string; slippage?: string; feeTier?: string; password?: string; dryRun?: boolean },
+  config: ReturnType<typeof loadConfig>,
+  outputFormat: OutputFormat,
+): Promise<void> {
+  const resolved = resolveVenueChainRef(chain, opts.venue, config);
+  const { walletClient, account, publicClient, walletName } = await getWalletContext(chain, opts.password, config);
+  const swapPlan = await getDefiVenueAdapter(opts.venue).buildSwapPlan({
+    chain: resolved,
+    config,
+    walletName,
+    walletAddress: account.address,
+    fromSymbol: "RLUSD",
+    toSymbol: opts.for,
+    amount: opts.amount,
+    slippageBps: parseSlippageBps(opts.slippage),
+    feeTier: opts.feeTier,
+  });
+
+  if (opts.dryRun) {
+    logger.raw(
+      formatOutput(
+        {
+          venue: opts.venue.toLowerCase(),
+          action: "sell_rlusd",
+          chain: resolved.label,
+          steps: swapPlan.intent.steps,
+        },
+        outputFormat,
+      ),
+    );
+    return;
+  }
+
+  const plan: LoadedPreparedPlan = {
+    ok: true,
+    command: "eth.swap.sell",
+    chain: resolved.label,
+    timestamp: new Date().toISOString(),
+    data: {
+      plan_id: "legacy_eth_swap_sell",
+      plan_path: "",
+      action: "defi.swap",
+      requires_confirmation: false,
+      human_summary: swapPlan.human_summary,
+      asset: swapPlan.asset,
+      params: swapPlan.params,
+      intent: swapPlan.intent,
+    },
+    warnings: swapPlan.warnings,
+    next: [],
+  };
+  const results = await executePreparedDefiPlan({
+    callerLabel: "eth.swap.sell",
+    expectedAction: "defi.swap",
+    plan,
+    walletClient,
+    publicClient,
+  });
+
+  logger.raw(
+    formatOutput(
+      {
+        status: "success",
+        action: "sell_rlusd",
+        chain: resolved.label,
+        venue: opts.venue.toLowerCase(),
+        steps: results,
+      },
+      outputFormat,
+    ),
+  );
 }
 
 async function executeSwapSell(

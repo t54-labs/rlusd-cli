@@ -6,6 +6,9 @@ export type NetworkEnvironment = "mainnet" | "testnet" | "devnet";
 
 export type OutputFormat = "table" | "json" | "json-compact";
 
+export type DefiVenueName = "aave" | "curve" | "uniswap";
+export type DefiLpOperation = "add" | "remove";
+
 export interface ChainConfig {
   websocket?: string;
   json_rpc?: string;
@@ -31,6 +34,7 @@ export interface ChainContracts {
   uniswap_router?: string;
   uniswap_quoter?: string;
   aave_v3_pool?: string;
+  curve_rlusd_usdc_pool?: string;
 }
 
 export interface FaucetConfig {
@@ -90,6 +94,8 @@ export type PrepareAction =
   | "evm.transfer"
   | "evm.approve"
   | "defi.supply"
+  | "defi.swap"
+  | "defi.lp"
   | "xrpl.trustline"
   | "xrpl.payment";
 

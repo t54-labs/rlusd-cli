@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { Command } from "commander";
+import type { PrepareAction } from "../../src/types/index.js";
 import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,11 +13,23 @@ vi.mock("node:os", async () => {
 });
 
 const { createProgram } = await import("../../src/cli.js");
-const { ensureConfigDir, getPlansDir } = await import("../../src/config/config.js");
+const { ensureConfigDir, getPlansDir, loadConfig } = await import("../../src/config/config.js");
 const { createPlanId, createPreparedPlan, loadPreparedPlan } = await import("../../src/plans/index.js");
 const { saveWallet } = await import("../../src/wallet/manager.js");
 const { generateXrplWallet, serializeXrplWallet } = await import("../../src/wallet/xrpl-wallet.js");
 const { generateEvmWallet, serializeEvmWallet } = await import("../../src/wallet/evm-wallet.js");
+
+function getSubcommand(parent: Command, name: string): Command {
+  const command = parent.commands.find((candidate) => candidate.name() === name);
+  expect(command).toBeDefined();
+  return command!;
+}
+
+function getOption(command: Command, long: string) {
+  const option = command.options.find((candidate) => candidate.long === long);
+  expect(option).toBeDefined();
+  return option!;
+}
 
 describe("Command Registration", () => {
   beforeEach(() => {
@@ -141,6 +155,80 @@ describe("Command Registration", () => {
     const subcommands = configCmd!.commands.map((c) => c.name());
     expect(subcommands).toContain("get");
     expect(subcommands).toContain("set");
+  });
+
+  it("should accept config set for the Curve RLUSD-USDC pool", () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(
+        [
+          "config",
+          "set",
+          "--chain",
+          "ethereum",
+          "--curve-rlusd-usdc-pool",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr).toEqual([]);
+    expect(loadConfig().contracts?.ethereum?.curve_rlusd_usdc_pool).toBe(
+      "0x1111111111111111111111111111111111111111",
+    );
+    expect(stdout.length).toBeGreaterThan(0);
+  });
+
+  it("should reject config set --curve-rlusd-usdc-pool for non-ethereum chains", () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => {
+      stdout.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map(String).join(" "));
+    };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      program.parse(
+        [
+          "config",
+          "set",
+          "--chain",
+          "base",
+          "--curve-rlusd-usdc-pool",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr.join(" ")).toContain("only supported for --chain ethereum");
+    expect(process.exitCode).toBe(1);
+    process.exitCode = undefined as unknown as number;
   });
 
   it("should register balance command with options", () => {
@@ -841,6 +929,24 @@ describe("DeFi Command Registration", () => {
     expect(swapCmd).toBeDefined();
   });
 
+  it("should accept --chain as optional on top-level defi venues (inheritable from global)", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const venuesCmd = getSubcommand(defiCmd, "venues");
+
+    expect(getOption(venuesCmd, "--chain").mandatory).toBe(false);
+  });
+
+  it("should accept --chain as optional on defi quote swap and require venue", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const quoteCmd = getSubcommand(defiCmd, "quote");
+    const swapCmd = getSubcommand(quoteCmd, "swap");
+
+    expect(getOption(swapCmd, "--chain").mandatory).toBe(false);
+    expect(getOption(swapCmd, "--venue").mandatory).toBe(true);
+  });
+
   it("should register defi supply preview prepare and execute subcommands", () => {
     const program = createProgram();
     const defiCmd = program.commands.find((c) => c.name() === "defi");
@@ -851,6 +957,53 @@ describe("DeFi Command Registration", () => {
     expect(subcommands).toContain("preview");
     expect(subcommands).toContain("prepare");
     expect(subcommands).toContain("execute");
+  });
+
+  it("should register defi swap prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const swapCmd = getSubcommand(defiCmd, "swap");
+
+    const subcommands = swapCmd.commands.map((c) => c.name());
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should register defi lp preview prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const lpCmd = getSubcommand(defiCmd, "lp");
+
+    const subcommands = lpCmd.commands.map((c) => c.name());
+    expect(subcommands).toContain("preview");
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
+  it("should accept --chain as optional on defi supply preview (inheritable from global)", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const supplyCmd = getSubcommand(defiCmd, "supply");
+    const previewCmd = getSubcommand(supplyCmd, "preview");
+
+    expect(getOption(previewCmd, "--chain").mandatory).toBe(false);
+  });
+
+  it("should accept --chain as optional on defi supply prepare (inheritable from global)", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const supplyCmd = getSubcommand(defiCmd, "supply");
+    const prepareCmd = getSubcommand(supplyCmd, "prepare");
+
+    expect(getOption(prepareCmd, "--chain").mandatory).toBe(false);
+  });
+
+  it("should allow defi swap and defi lp prepared plan action types", () => {
+    const swapAction: PrepareAction = "defi.swap";
+    const lpAction: PrepareAction = "defi.lp";
+
+    expect(swapAction).toBe("defi.swap");
+    expect(lpAction).toBe("defi.lp");
   });
 
   it("should require explicit confirmation for defi supply execute", async () => {
@@ -1006,6 +1159,62 @@ describe("DeFi Command Registration", () => {
     expect(output.error.message).toContain("missing supply sender");
   });
 
+  it("should list curve venue with preview status", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => { stdout.push(args.map(String).join(" ")); };
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "defi", "venues", "--chain", "ethereum-mainnet"],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    const curveVenue = envelope.data.venues.find((v: { venue: string }) => v.venue === "curve");
+    expect(curveVenue).toBeDefined();
+    expect(curveVenue.status).toBe("preview");
+    const uniVenue = envelope.data.venues.find((v: { venue: string }) => v.venue === "uniswap");
+    expect(uniVenue.status).toBe("active");
+  });
+
+  it("should resolve global --chain for defi venues (no leaf --chain)", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => { stdout.push(args.map(String).join(" ")); };
+    console.error = (...args: unknown[]) => { stderr.push(args.map(String).join(" ")); };
+
+    try {
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        ["--json", "--chain", "ethereum-mainnet", "defi", "venues"],
+        { from: "user" },
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    expect(stderr).toEqual([]);
+    const envelope = JSON.parse(stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data.venues.length).toBeGreaterThan(0);
+  });
+
   it("should reject execute when wallet does not exist", async () => {
     const envelope = await createPreparedPlan({
       command: "defi.supply.prepare",
@@ -1092,6 +1301,44 @@ describe("Ethereum Swap Command Registration", () => {
     expect(optionNames).toContain("--slippage");
     expect(optionNames).toContain("--fee-tier");
     expect(optionNames).toContain("--dry-run");
+  });
+
+  it("should require venue on eth swap quote", () => {
+    const program = createProgram();
+    const ethCmd = getSubcommand(program, "eth");
+    const swapCmd = getSubcommand(ethCmd, "swap");
+    const quoteCmd = getSubcommand(swapCmd, "quote");
+
+    expect(getOption(quoteCmd, "--venue").mandatory).toBe(true);
+  });
+
+  it("should require venue on eth swap sell", () => {
+    const program = createProgram();
+    const ethCmd = getSubcommand(program, "eth");
+    const swapCmd = getSubcommand(ethCmd, "swap");
+    const sellCmd = getSubcommand(swapCmd, "sell");
+
+    expect(getOption(sellCmd, "--venue").mandatory).toBe(true);
+  });
+
+  it("should require venue on eth swap buy", () => {
+    const program = createProgram();
+    const ethCmd = getSubcommand(program, "eth");
+    const swapCmd = getSubcommand(ethCmd, "swap");
+    const buyCmd = getSubcommand(swapCmd, "buy");
+
+    expect(getOption(buyCmd, "--venue").mandatory).toBe(true);
+  });
+
+  it("should register lp subcommands under eth", () => {
+    const program = createProgram();
+    const ethCmd = getSubcommand(program, "eth");
+    const lpCmd = getSubcommand(ethCmd, "lp");
+
+    const subcommands = lpCmd.commands.map((c) => c.name());
+    expect(subcommands).toContain("add");
+    expect(subcommands).toContain("remove");
+    expect(subcommands).toContain("quote");
   });
 });
 
