@@ -92,6 +92,36 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(output).toContain("addr-test");
   });
 
+  it("should export XRPL seed for an existing wallet", () => {
+    const gen = createProgram();
+    gen.exitOverride();
+    gen.parse(
+      [
+        "wallet",
+        "generate",
+        "--chain",
+        "xrpl",
+        "--name",
+        "seed-test",
+        "--password",
+        "p",
+      ],
+      { from: "user" },
+    );
+
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(
+      ["wallet", "export-seed", "--wallet", "seed-test", "--password", "p"],
+      { from: "user" },
+    );
+    const output = consoleOutput.join("\n");
+    expect(output).toContain("Seed");
+    expect(output).toContain("seed-test");
+    expect(output).toMatch(/sEd|^.*Seed: s/m);
+  });
+
   it("should switch default wallet with 'wallet use'", () => {
     const gen1 = createProgram();
     gen1.exitOverride();

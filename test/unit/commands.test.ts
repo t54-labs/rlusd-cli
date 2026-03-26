@@ -128,6 +128,7 @@ describe("Command Registration", () => {
     expect(subcommands).toContain("import");
     expect(subcommands).toContain("list");
     expect(subcommands).toContain("address");
+    expect(subcommands).toContain("export-seed");
     expect(subcommands).toContain("use");
     expect(subcommands).toContain("keychain");
   });

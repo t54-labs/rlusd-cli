@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { generateXrplWallet, importXrplWalletFromSecret, serializeXrplWallet } from "../wallet/xrpl-wallet.js";
+import {
+  decryptXrplSecret,
+  generateXrplWallet,
+  importXrplWalletFromSecret,
+  serializeXrplWallet,
+} from "../wallet/xrpl-wallet.js";
 import { generateEvmWallet, importEvmWalletFromPrivateKey, importEvmWalletFromMnemonic, serializeEvmWallet } from "../wallet/evm-wallet.js";
 import { saveWallet, listWallets, getDefaultWallet, setDefaultWallet } from "../wallet/manager.js";
 import { loadConfig, getWalletsDir } from "../config/config.js";
@@ -245,6 +250,67 @@ export function registerWalletCommand(program: Command): void {
         logger.label("Chain", chain);
         logger.label("Wallet", wallet.name);
         logger.label("Address", wallet.address);
+      }
+    });
+
+  walletCmd
+    .command("export-seed")
+    .description("Export the XRPL wallet seed for importing into third-party wallets")
+    .option("--wallet <name>", "wallet name to export (defaults to current XRPL wallet)")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()}, or use Keychain if enabled)`,
+    )
+    .action((opts) => {
+      try {
+        const wallet =
+          (opts.wallet ? listWallets().find((entry) => entry.name === opts.wallet) : null) ||
+          getDefaultWallet("xrpl");
+
+        if (!wallet) {
+          logger.error("No XRPL wallet found. Provide --wallet or create one first.");
+          process.exitCode = 1;
+          return;
+        }
+
+        if (wallet.chain !== "xrpl") {
+          logger.error(
+            `Wallet '${wallet.name}' is configured for ${wallet.chain}, not xrpl.`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const password = resolveWalletPassword(opts.password, {
+          walletName: wallet.name,
+        });
+        const seed = decryptXrplSecret(wallet, password);
+        const outputFormat =
+          (program.opts().output as OutputFormat) || loadConfig().output_format;
+
+        if (outputFormat === "json" || outputFormat === "json-compact") {
+          logger.raw(
+            formatOutput(
+              {
+                wallet: wallet.name,
+                chain: "xrpl",
+                address: wallet.address,
+                seed,
+              },
+              outputFormat,
+            ),
+          );
+        } else {
+          logger.warn(
+            "This seed grants full control of the XRPL wallet. Store it securely and avoid sharing screenshots.",
+          );
+          logger.label("Wallet", wallet.name);
+          logger.label("Address", wallet.address);
+          logger.label("Seed", seed);
+        }
+      } catch (err) {
+        logger.error((err as Error).message);
+        process.exitCode = 1;
       }
     });
 
