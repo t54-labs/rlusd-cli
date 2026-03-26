@@ -89,7 +89,7 @@ export type DefiLpPreviewRequest = {
   rlusdAmount?: string;
   usdcAmount?: string;
   lpAmount?: string;
-  receiveToken?: "RLUSD" | "USDC";
+  receiveToken?: string;
   publicClient?: QuotePublicClient;
 };
 
@@ -107,7 +107,9 @@ export type DefiLpPlanIntent = {
   venue: DefiVenueName;
   operation: DefiLpOperation;
   expected_lp_amount?: string;
+  min_lp_amount?: string;
   expected_receive_amount?: string;
+  min_receive_amount?: string;
   receive_token?: "RLUSD" | "USDC";
   steps: DefiIntentStep[];
 };
@@ -118,10 +120,11 @@ export type DefiLpPlanRequest = {
   walletName: string;
   walletAddress: `0x${string}`;
   operation: DefiLpOperation;
+  slippageBps: number;
   rlusdAmount?: string;
   usdcAmount?: string;
   lpAmount?: string;
-  receiveToken?: "RLUSD" | "USDC";
+  receiveToken?: string;
   publicClient?: QuotePublicClient;
 };
 

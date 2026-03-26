@@ -188,6 +188,7 @@ export function registerLpCommand(parent: Command, program: Command): void {
           walletName: wallet.name,
           walletAddress: wallet.address as `0x${string}`,
           operation: "add",
+          slippageBps: 50,
           rlusdAmount: opts.rlusdAmount,
           usdcAmount: opts.usdcAmount,
         });
@@ -263,6 +264,7 @@ export function registerLpCommand(parent: Command, program: Command): void {
           walletName: wallet.name,
           walletAddress: wallet.address as `0x${string}`,
           operation: "remove",
+          slippageBps: 50,
           lpAmount: opts.lpAmount,
           receiveToken: opts.receiveToken,
         });

@@ -742,7 +742,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
       rlusdAmount?: string;
       usdcAmount?: string;
       lpAmount?: string;
-      receiveToken?: "RLUSD" | "USDC";
+      receiveToken?: string;
     }) => {
       const config = loadConfig();
       try {
@@ -791,6 +791,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
     .option("--usdc-amount <amount>", "USDC amount for add liquidity")
     .option("--lp-amount <amount>", "LP token amount for remove liquidity")
     .option("--receive-token <symbol>", "Token to receive on remove: RLUSD | USDC")
+    .option("--slippage <bps>", "max slippage in basis points", "50")
     .action(async (opts: {
       chain?: string;
       venue: string;
@@ -799,7 +800,8 @@ export function registerTopLevelDefiCommand(program: Command): void {
       rlusdAmount?: string;
       usdcAmount?: string;
       lpAmount?: string;
-      receiveToken?: "RLUSD" | "USDC";
+      receiveToken?: string;
+      slippage?: string;
     }) => {
       const config = loadConfig();
       try {
@@ -819,6 +821,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
           walletName: opts.fromWallet,
           walletAddress: walletData.address as `0x${string}`,
           operation: parseLpOperation(opts.operation),
+          slippageBps: parseSlippageBps(opts.slippage),
           rlusdAmount: opts.rlusdAmount,
           usdcAmount: opts.usdcAmount,
           lpAmount: opts.lpAmount,

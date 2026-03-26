@@ -65,16 +65,17 @@ function buildAddLiquidityAmounts(pool: ReturnType<typeof resolveCurvePool>, inp
 
 function resolveRemoveLiquidityRequest(pool: ReturnType<typeof resolveCurvePool>, input: {
   lpAmount?: string;
-  receiveToken?: "RLUSD" | "USDC";
+  receiveToken?: string;
 }) {
   if (!input.lpAmount) {
     throw new Error("Remove liquidity requires --lp-amount.");
   }
-  if (!input.receiveToken || !["RLUSD", "USDC"].includes(input.receiveToken)) {
+  const normalized = input.receiveToken?.toUpperCase();
+  if (!normalized || !["RLUSD", "USDC"].includes(normalized)) {
     throw new Error("Remove liquidity requires --receive-token RLUSD|USDC.");
   }
 
-  const receiveToken = input.receiveToken as "RLUSD" | "USDC";
+  const receiveToken = normalized as "RLUSD" | "USDC";
   const coin = pool.coins[pool.coinIndexBySymbol[receiveToken]];
   return {
     receiveToken,
@@ -265,6 +266,8 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
       functionName: "calc_token_amount",
       args: [amounts, true],
     });
+    const minLpAmount =
+      expectedLpAmount - (expectedLpAmount * BigInt(input.slippageBps)) / 10_000n;
     const rlusdCoin = pool.coins[pool.coinIndexBySymbol.RLUSD];
     const usdcCoin = pool.coins[pool.coinIndexBySymbol.USDC];
 
@@ -284,12 +287,14 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
         operation: "add",
         rlusd_amount: input.rlusdAmount!,
         usdc_amount: input.usdcAmount!,
+        slippage_bps: String(input.slippageBps),
         pool_address: pool.address,
       },
       intent: {
         venue: "curve",
         operation: "add",
         expected_lp_amount: formatUnits(expectedLpAmount, CURVE_LP_DECIMALS),
+        min_lp_amount: formatUnits(minLpAmount, CURVE_LP_DECIMALS),
         steps: [
           {
             step: "approve_rlusd",
@@ -318,7 +323,7 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
             data: encodeFunctionData({
               abi: CURVE_STABLESWAP_POOL_ABI,
               functionName: "add_liquidity",
-              args: [amounts, 0n, input.walletAddress],
+              args: [amounts, minLpAmount, input.walletAddress],
             }),
           },
         ],
@@ -334,6 +339,8 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
     functionName: "calc_withdraw_one_coin",
     args: [remove.lpAmountRaw, curveIndex(remove.coin.index)],
   });
+  const minReceiveAmount =
+    expectedReceiveAmount - (expectedReceiveAmount * BigInt(input.slippageBps)) / 10_000n;
 
   return {
     asset: {
@@ -351,6 +358,7 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
       operation: "remove",
       lp_amount: input.lpAmount!,
       receive_token: remove.receiveToken,
+      slippage_bps: String(input.slippageBps),
       pool_address: pool.address,
     },
     intent: {
@@ -358,6 +366,7 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
       operation: "remove",
       receive_token: remove.receiveToken,
       expected_receive_amount: formatUnits(expectedReceiveAmount, remove.coin.decimals),
+      min_receive_amount: formatUnits(minReceiveAmount, remove.coin.decimals),
       steps: [
         {
           step: "remove_liquidity",
@@ -366,7 +375,7 @@ export async function buildCurveLpPlan(input: DefiLpPlanRequest): Promise<DefiLp
           data: encodeFunctionData({
             abi: CURVE_STABLESWAP_POOL_ABI,
             functionName: "remove_liquidity_one_coin",
-            args: [remove.lpAmountRaw, curveIndex(remove.coin.index), 0n, input.walletAddress],
+            args: [remove.lpAmountRaw, curveIndex(remove.coin.index), minReceiveAmount, input.walletAddress],
           }),
         },
       ],

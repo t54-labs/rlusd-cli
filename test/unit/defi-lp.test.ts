@@ -246,6 +246,104 @@ describe("Top-level DeFi LP flows", () => {
     expect(result.output.error.message).toContain("explicit confirmation");
   });
 
+  it("should encode non-zero min_lp_amount on add-liquidity prepare", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValueOnce(1998000000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+    saveWallet(serializeEvmWallet("ops", generateEvmWallet(), "p", "ethereum"));
+
+    const result = await runJsonCommand([
+      "defi", "lp", "prepare",
+      "--chain", "ethereum-mainnet",
+      "--venue", "curve",
+      "--operation", "add",
+      "--from-wallet", "ops",
+      "--rlusd-amount", "1000",
+      "--usdc-amount", "1000",
+      "--slippage", "50",
+    ]);
+
+    expect(result.output.ok).toBe(true);
+    const plan = await loadPreparedPlan(result.output.data.plan_path);
+    const intent = plan.data.intent as {
+      min_lp_amount?: string;
+      expected_lp_amount?: string;
+    };
+    expect(intent.min_lp_amount).toBeDefined();
+    expect(Number(intent.min_lp_amount)).toBeGreaterThan(0);
+    expect(Number(intent.min_lp_amount)).toBeLessThan(Number(intent.expected_lp_amount));
+  });
+
+  it("should encode non-zero min_receive_amount on remove-liquidity prepare", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValueOnce(49750000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+    saveWallet(serializeEvmWallet("ops", generateEvmWallet(), "p", "ethereum"));
+
+    const result = await runJsonCommand([
+      "defi", "lp", "prepare",
+      "--chain", "ethereum-mainnet",
+      "--venue", "curve",
+      "--operation", "remove",
+      "--from-wallet", "ops",
+      "--lp-amount", "50",
+      "--receive-token", "RLUSD",
+      "--slippage", "100",
+    ]);
+
+    expect(result.output.ok).toBe(true);
+    const plan = await loadPreparedPlan(result.output.data.plan_path);
+    const intent = plan.data.intent as {
+      min_receive_amount?: string;
+      expected_receive_amount?: string;
+    };
+    expect(intent.min_receive_amount).toBeDefined();
+    expect(Number(intent.min_receive_amount)).toBeGreaterThan(0);
+    expect(Number(intent.min_receive_amount)).toBeLessThan(Number(intent.expected_receive_amount));
+  });
+
+  it("should accept lowercase --receive-token for remove-liquidity preview", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValueOnce(49750000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+
+    const result = await runJsonCommand([
+      "defi", "lp", "preview",
+      "--chain", "ethereum-mainnet",
+      "--venue", "curve",
+      "--operation", "remove",
+      "--lp-amount", "50",
+      "--receive-token", "usdc",
+    ]);
+
+    expect(result.stderr).toEqual([]);
+    expect(result.output.ok).toBe(true);
+    expect(result.output.data.receive_token).toBe("USDC");
+  });
+
+  it("should accept lowercase --receive-token for remove-liquidity prepare", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValueOnce(49750000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+    saveWallet(serializeEvmWallet("ops", generateEvmWallet(), "p", "ethereum"));
+
+    const result = await runJsonCommand([
+      "defi", "lp", "prepare",
+      "--chain", "ethereum-mainnet",
+      "--venue", "curve",
+      "--operation", "remove",
+      "--from-wallet", "ops",
+      "--lp-amount", "50",
+      "--receive-token", "rlusd",
+    ]);
+
+    expect(result.stderr).toEqual([]);
+    expect(result.output.ok).toBe(true);
+    const plan = await loadPreparedPlan(result.output.data.plan_path);
+    const intent = plan.data.intent as { receive_token?: string };
+    expect(intent.receive_token).toBe("RLUSD");
+  });
+
   it("should reject lp execute plans whose action does not match", async () => {
     const envelope = await createPreparedPlan({
       command: "defi.swap.prepare",
