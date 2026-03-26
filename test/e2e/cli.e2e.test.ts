@@ -52,7 +52,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should generate and list XRPL wallet", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["wallet", "generate", "--chain", "xrpl", "--name", "test-xrpl", "--password", "pass"], { from: "user" });
+    program.parse(["wallet", "generate", "--chain", "xrpl", "--name", "test-xrpl", "--password", "pass", "--no-store-in-keychain"], { from: "user" });
 
     const output = consoleOutput.join("\n");
     expect(output).toContain("test-xrpl");
@@ -72,7 +72,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should generate and list EVM wallet", () => {
     const program = createProgram();
     program.exitOverride();
-    program.parse(["--chain", "ethereum", "wallet", "generate", "--name", "test-evm", "--password", "pass"], { from: "user" });
+    program.parse(["--chain", "ethereum", "wallet", "generate", "--name", "test-evm", "--password", "pass", "--no-store-in-keychain"], { from: "user" });
 
     const output = consoleOutput.join("\n");
     expect(output).toContain("test-evm");
@@ -82,7 +82,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should show wallet address", () => {
     const gen = createProgram();
     gen.exitOverride();
-    gen.parse(["wallet", "generate", "--chain", "xrpl", "--name", "addr-test", "--password", "p"], { from: "user" });
+    gen.parse(["wallet", "generate", "--chain", "xrpl", "--name", "addr-test", "--password", "p", "--no-store-in-keychain"], { from: "user" });
 
     consoleOutput = [];
     const program = createProgram();
@@ -105,6 +105,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
         "seed-test",
         "--password",
         "p",
+        "--no-store-in-keychain",
       ],
       { from: "user" },
     );
@@ -125,11 +126,11 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should switch default wallet with 'wallet use'", () => {
     const gen1 = createProgram();
     gen1.exitOverride();
-    gen1.parse(["wallet", "generate", "--chain", "xrpl", "--name", "w1", "--password", "p"], { from: "user" });
+    gen1.parse(["wallet", "generate", "--chain", "xrpl", "--name", "w1", "--password", "p", "--no-store-in-keychain"], { from: "user" });
 
     const gen2 = createProgram();
     gen2.exitOverride();
-    gen2.parse(["wallet", "generate", "--chain", "xrpl", "--name", "w2", "--password", "p"], { from: "user" });
+    gen2.parse(["wallet", "generate", "--chain", "xrpl", "--name", "w2", "--password", "p", "--no-store-in-keychain"], { from: "user" });
 
     consoleOutput = [];
     const program = createProgram();
@@ -141,7 +142,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should create and store an evm transfer plan with --json", async () => {
     const gen = createProgram();
     gen.exitOverride();
-    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "evm-plan", "--password", "p"], {
+    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "evm-plan", "--password", "p", "--no-store-in-keychain"], {
       from: "user",
     });
 
@@ -246,7 +247,7 @@ describe("CLI E2E — Full Command Tree Verification", () => {
   it("should create and store a defi supply plan with --json", async () => {
     const gen = createProgram();
     gen.exitOverride();
-    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "defi-plan", "--password", "p"], {
+    gen.parse(["--chain", "ethereum", "wallet", "generate", "--name", "defi-plan", "--password", "p", "--no-store-in-keychain"], {
       from: "user",
     });
 

@@ -22,6 +22,12 @@ import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
 export function registerWalletCommand(program: Command): void {
   const walletCmd = program.command("wallet").description("Wallet generation, import, and management");
 
+  function shouldStorePasswordInKeychain(
+    value: boolean | undefined,
+  ): boolean {
+    return supportsSystemKeychain() && value !== false;
+  }
+
   function persistPasswordToKeychainIfRequested(
     walletName: string,
     password: string,
@@ -46,7 +52,10 @@ export function registerWalletCommand(program: Command): void {
       "--password <password>",
       `encryption password (or set ${getWalletPasswordEnvVarName()})`,
     )
-    .option("--store-in-keychain", "store this wallet password in macOS Keychain")
+    .option(
+      "--no-store-in-keychain",
+      "disable automatic macOS Keychain storage for this wallet password",
+    )
     .action((opts) => {
       const chain = (opts.chain || program.opts().chain || "xrpl") as ChainName;
       const outputFormat = (program.opts().output as OutputFormat) || loadConfig().output_format;
@@ -66,11 +75,8 @@ export function registerWalletCommand(program: Command): void {
         const stored = serializeXrplWallet(name, wallet, password);
         saveWallet(stored);
         setDefaultWallet("xrpl", name);
-        persistPasswordToKeychainIfRequested(
-          name,
-          password,
-          Boolean(opts.storeInKeychain),
-        );
+        const useKeychain = shouldStorePasswordInKeychain(opts.storeInKeychain);
+        persistPasswordToKeychainIfRequested(name, password, useKeychain);
 
         if (outputFormat === "json" || outputFormat === "json-compact") {
           logger.raw(formatOutput({ name, chain: "xrpl", address: wallet.address, algorithm: algo }, outputFormat));
@@ -80,7 +86,7 @@ export function registerWalletCommand(program: Command): void {
           logger.label("Address", wallet.address);
           logger.label("Algorithm", algo);
           logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
-          if (opts.storeInKeychain) {
+          if (useKeychain) {
             logger.label("Keychain", "enabled");
           }
           logger.warn("Secret is encrypted and stored locally. Keep your password safe!");
@@ -91,11 +97,8 @@ export function registerWalletCommand(program: Command): void {
         const stored = serializeEvmWallet(name, wallet, password, chain as EvmChainName);
         saveWallet(stored);
         setDefaultWallet(chain, name);
-        persistPasswordToKeychainIfRequested(
-          name,
-          password,
-          Boolean(opts.storeInKeychain),
-        );
+        const useKeychain = shouldStorePasswordInKeychain(opts.storeInKeychain);
+        persistPasswordToKeychainIfRequested(name, password, useKeychain);
 
         if (outputFormat === "json" || outputFormat === "json-compact") {
           logger.raw(formatOutput({ name, chain, address: wallet.address }, outputFormat));
@@ -105,7 +108,7 @@ export function registerWalletCommand(program: Command): void {
           logger.label("Address", wallet.address);
           logger.label("Chain", chain);
           logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
-          if (opts.storeInKeychain) {
+          if (useKeychain) {
             logger.label("Keychain", "enabled");
           }
           logger.warn("Private key is encrypted and stored locally. Keep your password safe!");
@@ -125,7 +128,10 @@ export function registerWalletCommand(program: Command): void {
       "--password <password>",
       `encryption password (or set ${getWalletPasswordEnvVarName()})`,
     )
-    .option("--store-in-keychain", "store this wallet password in macOS Keychain")
+    .option(
+      "--no-store-in-keychain",
+      "disable automatic macOS Keychain storage for this wallet password",
+    )
     .action((opts) => {
       const chain = (opts.chain || program.opts().chain || "xrpl") as ChainName;
       let password: string;
@@ -149,14 +155,14 @@ export function registerWalletCommand(program: Command): void {
           const stored = serializeXrplWallet(name, wallet, password);
           saveWallet(stored);
           setDefaultWallet("xrpl", name);
-          persistPasswordToKeychainIfRequested(
-            name,
-            password,
-            Boolean(opts.storeInKeychain),
-          );
+          const useKeychain = shouldStorePasswordInKeychain(opts.storeInKeychain);
+          persistPasswordToKeychainIfRequested(name, password, useKeychain);
           logger.success(`XRPL wallet imported: ${wallet.address}`);
           logger.label("Name", name);
           logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
+          if (useKeychain) {
+            logger.label("Keychain", "enabled");
+          }
         } catch (err) {
           logger.error(`Failed to import XRPL wallet: ${(err as Error).message}`);
           process.exitCode = 1;
@@ -169,14 +175,14 @@ export function registerWalletCommand(program: Command): void {
             const stored = serializeEvmWallet(name, wallet, password, chain as EvmChainName);
             saveWallet(stored);
             setDefaultWallet(chain, name);
-            persistPasswordToKeychainIfRequested(
-              name,
-              password,
-              Boolean(opts.storeInKeychain),
-            );
+            const useKeychain = shouldStorePasswordInKeychain(opts.storeInKeychain);
+            persistPasswordToKeychainIfRequested(name, password, useKeychain);
             logger.success(`EVM wallet imported from mnemonic: ${wallet.address}`);
             logger.label("Name", name);
             logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
+            if (useKeychain) {
+              logger.label("Keychain", "enabled");
+            }
           } catch (err) {
             logger.error(`Failed to import from mnemonic: ${(err as Error).message}`);
             process.exitCode = 1;
@@ -188,14 +194,14 @@ export function registerWalletCommand(program: Command): void {
             const stored = serializeEvmWallet(name, wallet, password, chain as EvmChainName);
             saveWallet(stored);
             setDefaultWallet(chain, name);
-            persistPasswordToKeychainIfRequested(
-              name,
-              password,
-              Boolean(opts.storeInKeychain),
-            );
+            const useKeychain = shouldStorePasswordInKeychain(opts.storeInKeychain);
+            persistPasswordToKeychainIfRequested(name, password, useKeychain);
             logger.success(`EVM wallet imported: ${wallet.address}`);
             logger.label("Name", name);
             logger.label("Stored at", `${getWalletsDir()}/${name}.json`);
+            if (useKeychain) {
+              logger.label("Keychain", "enabled");
+            }
           } catch (err) {
             logger.error(`Failed to import EVM wallet: ${(err as Error).message}`);
             process.exitCode = 1;

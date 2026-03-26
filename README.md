@@ -250,8 +250,9 @@ rlusd wallet generate --chain xrpl --algorithm secp256k1 --name my-xrpl-secp
 # Generate an Ethereum wallet (works for all EVM chains)
 rlusd wallet generate --chain ethereum --name my-eth --password s3cret
 
-# On macOS, store the wallet password in Keychain immediately
-rlusd wallet generate --chain xrpl --name my-xrpl --password s3cret --store-in-keychain
+# On macOS, Keychain storage is enabled by default.
+# If you want to opt out for a specific wallet:
+rlusd wallet generate --chain xrpl --name my-xrpl --password s3cret --no-store-in-keychain
 ```
 
 #### `rlusd wallet import`
@@ -312,6 +313,12 @@ rlusd wallet keychain disable my-xrpl
 ```
 
 On macOS, this uses the system Keychain. Depending on your machine settings, unlocking the Keychain may surface as a Touch ID or system authentication prompt.
+
+Existing wallets do **not** need to be recreated. You can migrate an older wallet into Keychain at any time:
+
+```bash
+rlusd wallet keychain enable my-xrpl --password your-existing-password
+```
 
 ---
 
