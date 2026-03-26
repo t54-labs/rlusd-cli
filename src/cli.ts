@@ -16,6 +16,7 @@ import { registerEvmTxCommand, registerTxCommand, registerXrplTxCommand } from "
 import { registerPriceCommand } from "./commands/price.cmd.js";
 import { registerApproveCommand, registerEvmApproveCommand } from "./commands/eth/approve.cmd.js";
 import { registerDefiCommand, registerTopLevelDefiCommand } from "./commands/eth/defi.cmd.js";
+import { registerLpCommand } from "./commands/eth/lp.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
 import { beginAgentCapture, endAgentCapture, isAgentCaptureActive } from "./agent/envelope.js";
@@ -142,6 +143,7 @@ export function createProgram(): Command {
   registerApproveCommand(ethCmd, program);
   registerDefiCommand(ethCmd, program);
   registerSwapCommand(ethCmd, program);
+  registerLpCommand(ethCmd, program);
 
   const evmCmd = program.command("evm").description("Prepared EVM RLUSD agent flows");
   registerEvmTransferCommand(evmCmd, program);

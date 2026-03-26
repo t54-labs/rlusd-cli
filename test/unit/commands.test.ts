@@ -1328,6 +1328,17 @@ describe("Ethereum Swap Command Registration", () => {
 
     expect(getOption(buyCmd, "--venue").mandatory).toBe(true);
   });
+
+  it("should register lp subcommands under eth", () => {
+    const program = createProgram();
+    const ethCmd = getSubcommand(program, "eth");
+    const lpCmd = getSubcommand(ethCmd, "lp");
+
+    const subcommands = lpCmd.commands.map((c) => c.name());
+    expect(subcommands).toContain("add");
+    expect(subcommands).toContain("remove");
+    expect(subcommands).toContain("quote");
+  });
 });
 
 describe("Uniswap Router ABI", () => {
