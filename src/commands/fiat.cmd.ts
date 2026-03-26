@@ -10,16 +10,12 @@ function writeData(program: Command, command: string, data: Record<string, unkno
   const config = loadConfig();
   const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
   if (outputFormat === "json" || outputFormat === "json-compact") {
-    logger.raw(
-      formatOutput(
-        createSuccessEnvelope({
-          command,
-          timestamp: new Date().toISOString(),
-          data,
-        }),
-        outputFormat,
-      ),
-    );
+    const envelope = createSuccessEnvelope({
+      command,
+      timestamp: new Date().toISOString(),
+      data,
+    });
+    logger.raw(outputFormat === "json" ? JSON.stringify(envelope, null, 2) : JSON.stringify(envelope));
     return;
   }
 
