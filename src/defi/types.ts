@@ -1,5 +1,5 @@
 import type { ResolvedEvmChainRef } from "../clients/evm-client.js";
-import type { AppConfig, DefiVenueName, ResolvedAsset } from "../types/index.js";
+import type { AppConfig, DefiLpOperation, DefiVenueName, ResolvedAsset } from "../types/index.js";
 
 export type DefiIntentStep = {
   step: string;
@@ -82,10 +82,61 @@ export type DefiSwapPlanResult = {
   warnings: string[];
 };
 
+export type DefiLpPreviewRequest = {
+  chain: ResolvedEvmChainRef;
+  config: AppConfig;
+  operation: DefiLpOperation;
+  rlusdAmount?: string;
+  usdcAmount?: string;
+  lpAmount?: string;
+  receiveToken?: "RLUSD" | "USDC";
+  publicClient?: QuotePublicClient;
+};
+
+export type DefiLpPreviewResult = {
+  venue: DefiVenueName;
+  operation: DefiLpOperation;
+  pool_name: string;
+  pool_address: `0x${string}`;
+  expected_lp_amount?: string;
+  expected_receive_amount?: string;
+  receive_token?: "RLUSD" | "USDC";
+};
+
+export type DefiLpPlanIntent = {
+  venue: DefiVenueName;
+  operation: DefiLpOperation;
+  expected_lp_amount?: string;
+  expected_receive_amount?: string;
+  receive_token?: "RLUSD" | "USDC";
+  steps: DefiIntentStep[];
+};
+
+export type DefiLpPlanRequest = {
+  chain: ResolvedEvmChainRef;
+  config: AppConfig;
+  walletName: string;
+  walletAddress: `0x${string}`;
+  operation: DefiLpOperation;
+  rlusdAmount?: string;
+  usdcAmount?: string;
+  lpAmount?: string;
+  receiveToken?: "RLUSD" | "USDC";
+  publicClient?: QuotePublicClient;
+};
+
+export type DefiLpPlanResult = {
+  asset: ResolvedAsset;
+  human_summary: string;
+  params: Record<string, string>;
+  intent: DefiLpPlanIntent;
+  warnings: string[];
+};
+
 export type DefiVenueAdapter = {
   venue: DefiVenueName;
   quoteSwap: (input: DefiSwapQuoteRequest) => Promise<DefiSwapQuoteResult>;
   buildSwapPlan: (input: DefiSwapPlanRequest) => Promise<DefiSwapPlanResult>;
-  previewLp: (input: unknown) => Promise<unknown>;
-  buildLpPlan: (input: unknown) => Promise<unknown>;
+  previewLp: (input: DefiLpPreviewRequest) => Promise<DefiLpPreviewResult>;
+  buildLpPlan: (input: DefiLpPlanRequest) => Promise<DefiLpPlanResult>;
 };

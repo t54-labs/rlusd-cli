@@ -7,6 +7,7 @@ export type NetworkEnvironment = "mainnet" | "testnet" | "devnet";
 export type OutputFormat = "table" | "json" | "json-compact";
 
 export type DefiVenueName = "aave" | "curve" | "uniswap";
+export type DefiLpOperation = "add" | "remove";
 
 export interface ChainConfig {
   websocket?: string;

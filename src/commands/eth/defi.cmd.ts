@@ -9,7 +9,13 @@ import { RLUSD_ERC20_ABI } from "../../abi/rlusd-erc20.js";
 import { AAVE_POOL_ABI } from "../../abi/aave-pool.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, OutputFormat, StoredEvmWallet, ResolvedAsset } from "../../types/index.js";
+import type {
+  DefiLpOperation,
+  EvmChainName,
+  OutputFormat,
+  StoredEvmWallet,
+  ResolvedAsset,
+} from "../../types/index.js";
 import { AAVE_V3_POOL_ETHEREUM } from "../../config/constants.js";
 import type { AppConfig } from "../../types/index.js";
 import { getPreparePolicy } from "../../policy/index.js";
@@ -450,6 +456,20 @@ function parseSlippageBps(raw?: string): number {
   return value;
 }
 
+function requireCurveLpVenue(venue: string): void {
+  if (venue.trim().toLowerCase() !== "curve") {
+    throw new Error("Only --venue curve is supported for this command today.");
+  }
+}
+
+function parseLpOperation(raw: string): DefiLpOperation {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "add" || normalized === "remove") {
+    return normalized;
+  }
+  throw new Error("Invalid --operation. Supported values: add, remove.");
+}
+
 function resolveDefiChain(opts: { chain?: string }, program: Command, config: ReturnType<typeof loadConfig>): string {
   const raw = opts.chain || program.opts().chain || config.default_chain;
   if (!raw) {
@@ -690,6 +710,221 @@ export function registerTopLevelDefiCommand(program: Command): void {
         emitEnvelope(
           createErrorEnvelope({
             command: "defi.swap.execute",
+            timestamp: new Date().toISOString(),
+            code:
+              message.includes("explicit confirmation")
+                ? "CONFIRMATION_REQUIRED"
+                : message.includes("deterministic plan id")
+                  ? "PLAN_INTEGRITY_MISMATCH"
+                  : "EXECUTION_FAILED",
+            message,
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  const lpCmd = defiCmd.command("lp").description("Prepared Curve LP flows");
+  lpCmd
+    .command("preview")
+    .description("Preview a DeFi LP flow")
+    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--venue <venue>", "venue name")
+    .requiredOption("--operation <operation>", "LP operation: add | remove")
+    .option("--rlusd-amount <amount>", "RLUSD amount for add liquidity")
+    .option("--usdc-amount <amount>", "USDC amount for add liquidity")
+    .option("--lp-amount <amount>", "LP token amount for remove liquidity")
+    .option("--receive-token <symbol>", "Token to receive on remove: RLUSD | USDC")
+    .action(async (opts: {
+      chain?: string;
+      venue: string;
+      operation: string;
+      rlusdAmount?: string;
+      usdcAmount?: string;
+      lpAmount?: string;
+      receiveToken?: "RLUSD" | "USDC";
+    }) => {
+      const config = loadConfig();
+      try {
+        const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        requireCurveLpVenue(opts.venue);
+        const preview = await getDefiVenueAdapter(opts.venue).previewLp({
+          chain: resolved,
+          config,
+          operation: parseLpOperation(opts.operation),
+          rlusdAmount: opts.rlusdAmount,
+          usdcAmount: opts.usdcAmount,
+          lpAmount: opts.lpAmount,
+          receiveToken: opts.receiveToken,
+        });
+
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "defi.lp.preview",
+            chain: resolved.label,
+            timestamp: new Date().toISOString(),
+            data: preview,
+            warnings: ["quote_expires"],
+          }),
+        );
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "defi.lp.preview",
+            timestamp: new Date().toISOString(),
+            code: "PREVIEW_UNAVAILABLE",
+            message: error instanceof Error ? error.message : "Unable to preview LP flow.",
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  lpCmd
+    .command("prepare")
+    .description("Prepare a DeFi LP flow")
+    .option("--chain <chain>", "target chain label, e.g. ethereum-mainnet")
+    .requiredOption("--venue <venue>", "venue name")
+    .requiredOption("--operation <operation>", "LP operation: add | remove")
+    .requiredOption("--from-wallet <name>", "wallet name to provide liquidity from")
+    .option("--rlusd-amount <amount>", "RLUSD amount for add liquidity")
+    .option("--usdc-amount <amount>", "USDC amount for add liquidity")
+    .option("--lp-amount <amount>", "LP token amount for remove liquidity")
+    .option("--receive-token <symbol>", "Token to receive on remove: RLUSD | USDC")
+    .action(async (opts: {
+      chain?: string;
+      venue: string;
+      operation: string;
+      fromWallet: string;
+      rlusdAmount?: string;
+      usdcAmount?: string;
+      lpAmount?: string;
+      receiveToken?: "RLUSD" | "USDC";
+    }) => {
+      const config = loadConfig();
+      try {
+        const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        requireCurveLpVenue(opts.venue);
+        const walletData = resolveWalletForChain(resolved.chain, {
+          walletName: opts.fromWallet,
+          optionName: "--from-wallet",
+        });
+        if (isXrplWallet(walletData)) {
+          throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
+        }
+
+        const lpPlan = await getDefiVenueAdapter(opts.venue).buildLpPlan({
+          chain: resolved,
+          config,
+          walletName: opts.fromWallet,
+          walletAddress: walletData.address as `0x${string}`,
+          operation: parseLpOperation(opts.operation),
+          rlusdAmount: opts.rlusdAmount,
+          usdcAmount: opts.usdcAmount,
+          lpAmount: opts.lpAmount,
+          receiveToken: opts.receiveToken,
+        });
+        const policy = getPreparePolicy(resolved.label, "defi.lp");
+        const plan = await createPreparedPlan({
+          command: "defi.lp.prepare",
+          chain: resolved.label,
+          timestamp: new Date().toISOString(),
+          action: "defi.lp",
+          requires_confirmation: policy.requires_confirmation,
+          human_summary: lpPlan.human_summary,
+          asset: lpPlan.asset,
+          params: lpPlan.params,
+          intent: lpPlan.intent,
+          warnings: [...new Set([...policy.warnings, ...lpPlan.warnings])],
+        });
+
+        emitEnvelope(plan);
+      } catch (error) {
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "defi.lp.prepare",
+            timestamp: new Date().toISOString(),
+            code: "PREPARE_FAILED",
+            message: error instanceof Error ? error.message : "Unable to prepare LP flow.",
+          }),
+        );
+        process.exitCode = 1;
+      }
+    });
+
+  lpCmd
+    .command("execute")
+    .description("Execute a prepared DeFi LP flow")
+    .requiredOption("--plan <path>", "path to a prepared plan file")
+    .option("--confirm-plan-id <planId>", "explicit confirmation matching the prepared plan id")
+    .option(
+      "--password <password>",
+      `wallet password (or set ${getWalletPasswordEnvVarName()})`,
+    )
+    .action(async (opts: { plan: string; confirmPlanId?: string; password?: string }) => {
+      try {
+        const plan = await loadPreparedPlan(opts.plan);
+        assertExecutableDefiPlan(plan, "defi.lp", "defi.lp.execute", opts.confirmPlanId);
+        const config = loadConfig();
+        const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const walletName = plan.data.params.from;
+        if (!walletName) {
+          throw new Error("Prepared plan is missing LP sender.");
+        }
+        const walletData = resolveWalletForChain(resolved.chain, {
+          walletName,
+          optionName: "--from-wallet",
+        });
+        if (isXrplWallet(walletData)) {
+          throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
+        }
+
+        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        if (!rpcUrl) {
+          throw new Error(`RPC not configured for ${resolved.chain}`);
+        }
+
+        const password = resolveWalletPassword(opts.password, {
+          machineReadable: true,
+          walletName,
+        });
+        const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
+        const account = privateKeyToAccount(privateKey as `0x${string}`);
+        const walletClient = createWalletClient({
+          account,
+          chain: getViemChain(resolved.chain, resolved.network),
+          transport: http(rpcUrl),
+        });
+        const publicClient = getEvmPublicClient(resolved.chain, resolved.network);
+        const results = await executePreparedDefiPlan({
+          callerLabel: "defi.lp.execute",
+          expectedAction: "defi.lp",
+          plan,
+          walletClient,
+          publicClient,
+          confirmPlanId: opts.confirmPlanId,
+        });
+
+        emitEnvelope(
+          createSuccessEnvelope({
+            command: "defi.lp.execute",
+            chain: plan.chain,
+            timestamp: new Date().toISOString(),
+            data: {
+              plan_id: plan.data.plan_id,
+              plan_path: opts.plan,
+              action: plan.data.action,
+              steps: results,
+            },
+            warnings: plan.warnings,
+          }),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to execute prepared LP flow.";
+        emitEnvelope(
+          createErrorEnvelope({
+            command: "defi.lp.execute",
             timestamp: new Date().toISOString(),
             code:
               message.includes("explicit confirmation")

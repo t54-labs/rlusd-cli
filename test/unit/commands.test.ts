@@ -968,6 +968,17 @@ describe("DeFi Command Registration", () => {
     expect(subcommands).toContain("execute");
   });
 
+  it("should register defi lp preview prepare and execute subcommands", () => {
+    const program = createProgram();
+    const defiCmd = getSubcommand(program, "defi");
+    const lpCmd = getSubcommand(defiCmd, "lp");
+
+    const subcommands = lpCmd.commands.map((c) => c.name());
+    expect(subcommands).toContain("preview");
+    expect(subcommands).toContain("prepare");
+    expect(subcommands).toContain("execute");
+  });
+
   it("should accept --chain as optional on defi supply preview (inheritable from global)", () => {
     const program = createProgram();
     const defiCmd = getSubcommand(program, "defi");

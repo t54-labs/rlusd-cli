@@ -96,7 +96,7 @@ export async function quoteUniswapSwap(input: DefiSwapQuoteRequest): Promise<Def
 export const UNISWAP_DEFI_ADAPTER: DefiVenueAdapter = {
   venue: "uniswap",
   quoteSwap: quoteUniswapSwap,
-  buildSwapPlan: async () => unsupported("buildSwapPlan"),
-  previewLp: async () => unsupported("previewLp"),
-  buildLpPlan: async () => unsupported("buildLpPlan"),
+  buildSwapPlan: async (_input) => unsupported("buildSwapPlan"),
+  previewLp: async (_input) => unsupported("previewLp"),
+  buildLpPlan: async (_input) => unsupported("buildLpPlan"),
 };
