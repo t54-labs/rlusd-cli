@@ -135,6 +135,88 @@ describe("x402 XRPL helpers", () => {
     ).toThrow("No compatible x402 XRPL payment option found.");
   });
 
+  it("selects the first matching option from a multi-option list without asset or issuer constraints", () => {
+    const selected = selectCompatibleX402Requirement(
+      [
+        {
+          scheme: "exact",
+          network: "xrpl:1",
+          amount: "1.25",
+          asset: "USD",
+          payTo: "rIssuerOne",
+          maxTimeoutSeconds: 30,
+          extra: { issuer: "rIssuerOne" },
+        },
+        {
+          scheme: "exact",
+          network: "xrpl:1",
+          amount: "0.5",
+          asset: "XRP",
+          payTo: "rPayeeXrp",
+          maxTimeoutSeconds: 30,
+        },
+        {
+          scheme: "exact",
+          network: "xrpl:1",
+          amount: "0.8",
+          asset: "524C555344000000000000000000000000000000",
+          payTo: "rPayeeRlusd",
+          maxTimeoutSeconds: 30,
+          extra: { issuer: "rRlusdIssuer" },
+        },
+      ],
+      {
+        network: "xrpl:1",
+        maxValue: "1",
+      },
+    );
+
+    expect(selected.asset).toBe("XRP");
+    expect(selected.amount).toBe("0.5");
+  });
+
+  it("rejects zero max value", () => {
+    expect(() =>
+      selectCompatibleX402Requirement(
+        [
+          {
+            scheme: "exact",
+            network: "xrpl:1",
+            amount: "0.5",
+            asset: "XRP",
+            payTo: "rPayee",
+            maxTimeoutSeconds: 30,
+          },
+        ],
+        {
+          network: "xrpl:1",
+          maxValue: "0",
+        },
+      ),
+    ).toThrow("Invalid x402 max value: 0");
+  });
+
+  it("rejects negative max value", () => {
+    expect(() =>
+      selectCompatibleX402Requirement(
+        [
+          {
+            scheme: "exact",
+            network: "xrpl:1",
+            amount: "0.5",
+            asset: "XRP",
+            payTo: "rPayee",
+            maxTimeoutSeconds: 30,
+          },
+        ],
+        {
+          network: "xrpl:1",
+          maxValue: "-5",
+        },
+      ),
+    ).toThrow("Invalid x402 max value: -5");
+  });
+
   it("rejects invalid max value inputs", () => {
     expect(() =>
       selectCompatibleX402Requirement(
@@ -153,6 +235,6 @@ describe("x402 XRPL helpers", () => {
           maxValue: "not-a-number",
         },
       ),
-    ).toThrow("Invalid x402 max value: not-a-number");
+    ).toThrow("Invalid x402 max value: not-a-number. Must be a positive number.");
   });
 });

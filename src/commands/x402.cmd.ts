@@ -58,7 +58,7 @@ export function registerX402Command(program: Command): void {
     .description("Fetch an x402-protected resource")
     .argument("<url>", "resource URL")
     .option("--wallet <name>", "stored XRPL wallet to use for signing")
-    .option("--method <method>", "HTTP method to use (GET or POST)", "GET")
+    .option("--method <method>", "HTTP method (GET or POST)", "GET")
     .option("--header <header...>", "additional request header(s) as 'Name: value'")
     .option("--json-body <json>", "JSON request body for POST requests")
     .option("--require-asset <asset>", "only accept payment options for this XRPL asset")
@@ -67,7 +67,7 @@ export function registerX402Command(program: Command): void {
       "--password <password>",
       `wallet password (or set ${getWalletPasswordEnvVarName()})`,
     )
-    .requiredOption("--max-value <amount>", "maximum amount willing to pay if challenged")
+    .requiredOption("--max-value <amount>", "maximum amount willing to pay per request")
     .action(
       async (
         url: string,
@@ -104,6 +104,9 @@ export function registerX402Command(program: Command): void {
           });
           const wallet = restoreXrplWallet(walletData as StoredXrplWallet, password);
           const method = (opts.method ?? "GET").toUpperCase();
+          if (method !== "GET" && method !== "POST") {
+            throw new Error(`Unsupported HTTP method '${method}'. Only GET and POST are supported.`);
+          }
           const headers = parseHeaderEntries(opts.header);
           let body: string | undefined;
 
@@ -211,13 +214,13 @@ export function registerX402Command(program: Command): void {
                 },
                 payment: settlement
                   ? {
-                      attempted: true,
+                      negotiated: true,
                       max_value: opts.maxValue,
                       selected_requirement: selectedRequirement,
                       settlement,
                     }
                   : {
-                      attempted: Boolean(selectedRequirement),
+                      negotiated: Boolean(selectedRequirement),
                       max_value: opts.maxValue,
                       selected_requirement: selectedRequirement,
                     },

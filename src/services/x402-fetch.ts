@@ -34,8 +34,8 @@ export function resolveX402NetworkId(network: NetworkEnvironment): "xrpl:0" | "x
 
 export function parseAndValidateX402MaxValue(maxValue: string): number {
   const parsed = Number.parseFloat(maxValue);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid x402 max value: ${maxValue}`);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid x402 max value: ${maxValue}. Must be a positive number.`);
   }
   return parsed;
 }

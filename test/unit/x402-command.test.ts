@@ -113,7 +113,7 @@ describe("x402 fetch command", () => {
     expect(result.output.data.response.status).toBe(200);
     expect(result.output.data.response.body).toEqual({ ok: true, resource: "free" });
     expect(result.output.data.payment).toEqual({
-      attempted: false,
+      negotiated: false,
       max_value: "1",
     });
   });
@@ -176,7 +176,7 @@ describe("x402 fetch command", () => {
     expect(capturedOptions?.paymentRequirementsSelector).toEqual(expect.any(Function));
     expect(capturedOptions?.paymentHeaderFactory).toEqual(expect.any(Function));
     expect(result.output.data.payment).toEqual({
-      attempted: true,
+      negotiated: true,
       max_value: "1",
       selected_requirement: accepted,
       settlement: {
@@ -301,6 +301,114 @@ describe("x402 fetch command", () => {
     expect(result.output.error.code).toBe("X402_FETCH_FAILED");
     expect(result.output.error.message).toContain("Invalid x402 max value");
     expect(x402FetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects zero max-value before attempting a paid fetch", async () => {
+    const result = await runJsonCommand([
+      "x402",
+      "fetch",
+      "https://example.com/resource",
+      "--wallet",
+      "buyer",
+      "--max-value",
+      "0",
+    ]);
+
+    expect(result.stdout).toEqual([]);
+    expect(result.output.ok).toBe(false);
+    expect(result.output.error.code).toBe("X402_FETCH_FAILED");
+    expect(result.output.error.message).toContain("Invalid x402 max value");
+    expect(x402FetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects negative max-value before attempting a paid fetch", async () => {
+    const result = await runJsonCommand([
+      "x402",
+      "fetch",
+      "https://example.com/resource",
+      "--wallet",
+      "buyer",
+      "--max-value",
+      "-5",
+    ]);
+
+    expect(result.stdout).toEqual([]);
+    expect(result.output.ok).toBe(false);
+    expect(result.output.error.code).toBe("X402_FETCH_FAILED");
+    expect(result.output.error.message).toContain("Invalid x402 max value");
+    expect(x402FetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported HTTP methods", async () => {
+    const result = await runJsonCommand([
+      "x402",
+      "fetch",
+      "https://example.com/resource",
+      "--wallet",
+      "buyer",
+      "--max-value",
+      "1",
+      "--method",
+      "PUT",
+    ]);
+
+    expect(result.stdout).toEqual([]);
+    expect(result.output.ok).toBe(false);
+    expect(result.output.error.code).toBe("X402_FETCH_FAILED");
+    expect(result.output.error.message).toContain("Unsupported HTTP method");
+    expect(x402FetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed JSON body with a clear error", async () => {
+    const result = await runJsonCommand([
+      "x402",
+      "fetch",
+      "https://example.com/resource",
+      "--wallet",
+      "buyer",
+      "--max-value",
+      "1",
+      "--method",
+      "POST",
+      "--json-body",
+      "{not valid json}",
+    ]);
+
+    expect(result.stdout).toEqual([]);
+    expect(result.output.ok).toBe(false);
+    expect(result.output.error.code).toBe("X402_FETCH_FAILED");
+    expect(x402FetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends POST without a body when --json-body is omitted", async () => {
+    let capturedInit: RequestInit | undefined;
+
+    x402FetchMock.mockImplementation(() => {
+      return async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedInit = init;
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      };
+    });
+
+    const result = await runJsonCommand([
+      "x402",
+      "fetch",
+      "https://example.com/resource",
+      "--wallet",
+      "buyer",
+      "--max-value",
+      "1",
+      "--method",
+      "POST",
+    ]);
+
+    expect(result.stderr).toEqual([]);
+    expect(result.output.ok).toBe(true);
+    expect(capturedInit?.method).toBe("POST");
+    expect(capturedInit?.body).toBeUndefined();
   });
 
   it("emits an error envelope when negotiation falls back to an unresolved 402 response", async () => {
