@@ -121,7 +121,7 @@ describe("x402 fetch command", () => {
   it("captures the selected payment requirement and settlement metadata for challenged responses", async () => {
     const accepted = {
       scheme: "exact",
-      network: "xrpl:0",
+      network: "xrpl:1",
       amount: "0.75",
       asset: "XRP",
       payTo: "rPaid",
@@ -171,7 +171,7 @@ describe("x402 fetch command", () => {
     ]);
 
     expect(result.stderr).toEqual([]);
-    expect(capturedOptions?.network).toBe("xrpl:0");
+    expect(capturedOptions?.network).toBe("xrpl:1");
     expect(capturedOptions?.maxValue).toBe("1");
     expect(capturedOptions?.paymentRequirementsSelector).toEqual(expect.any(Function));
     expect(capturedOptions?.paymentHeaderFactory).toEqual(expect.any(Function));
@@ -191,7 +191,7 @@ describe("x402 fetch command", () => {
   it("honors explicit asset and issuer constraints when negotiating payment options", async () => {
     const xrpOption = {
       scheme: "exact",
-      network: "xrpl:0",
+      network: "xrpl:1",
       amount: "0.75",
       asset: "XRP",
       payTo: "rPaidXrp",
@@ -199,7 +199,7 @@ describe("x402 fetch command", () => {
     };
     const rlusdOption = {
       scheme: "exact",
-      network: "xrpl:0",
+      network: "xrpl:1",
       amount: "0.8",
       asset: "524C555344000000000000000000000000000000",
       payTo: "rPaidRlusd",

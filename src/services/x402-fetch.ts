@@ -23,12 +23,11 @@ export interface SelectX402RequirementOptions {
 export function resolveX402NetworkId(network: NetworkEnvironment): "xrpl:0" | "xrpl:1" | "xrpl:2" {
   switch (network) {
     case "mainnet":
+      return "xrpl:0";
+    case "testnet":
       return "xrpl:1";
     case "devnet":
       return "xrpl:2";
-    case "testnet":
-    default:
-      return "xrpl:0";
   }
 }
 

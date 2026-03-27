@@ -7,8 +7,8 @@ import {
 
 describe("x402 XRPL helpers", () => {
   it("maps runtime environments to x402 XRPL network ids", () => {
-    expect(resolveX402NetworkId("mainnet")).toBe("xrpl:1");
-    expect(resolveX402NetworkId("testnet")).toBe("xrpl:0");
+    expect(resolveX402NetworkId("mainnet")).toBe("xrpl:0");
+    expect(resolveX402NetworkId("testnet")).toBe("xrpl:1");
     expect(resolveX402NetworkId("devnet")).toBe("xrpl:2");
   });
 
