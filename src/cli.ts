@@ -19,6 +19,7 @@ import { registerDefiCommand, registerTopLevelDefiCommand } from "./commands/eth
 import { registerLpCommand } from "./commands/eth/lp.cmd.js";
 import { registerSwapCommand } from "./commands/eth/swap.cmd.js";
 import { registerBridgeCommand } from "./commands/bridge.cmd.js";
+import { registerX402Command } from "./commands/x402.cmd.js";
 import { beginAgentCapture, endAgentCapture, isAgentCaptureActive } from "./agent/envelope.js";
 import { loadConfig } from "./config/config.js";
 import { logger } from "./utils/logger.js";
@@ -124,6 +125,7 @@ export function createProgram(): Command {
   registerBalanceCommand(program);
   registerResolveCommand(program);
   registerFiatCommand(program);
+  registerX402Command(program);
   registerSendCommand(program);
   registerFaucetCommand(program);
   registerTxCommand(program);

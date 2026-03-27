@@ -53,6 +53,7 @@ describe("Command Registration", () => {
     expect(commandNames).toContain("send");
     expect(commandNames).toContain("faucet");
     expect(commandNames).toContain("xrpl");
+    expect(commandNames).toContain("x402");
     expect(commandNames).toContain("resolve");
     expect(commandNames).toContain("fiat");
   });
@@ -97,6 +98,29 @@ describe("Command Registration", () => {
     expect(subcommands).toContain("prepare");
     expect(subcommands).toContain("execute");
     expect(subcommands).toContain("receipt");
+  });
+
+  it("should register x402 fetch subcommands", () => {
+    const program = createProgram();
+    const x402Cmd = program.commands.find((c) => c.name() === "x402");
+    expect(x402Cmd).toBeDefined();
+
+    const subcommands = x402Cmd!.commands.map((c) => c.name());
+    expect(subcommands).toContain("fetch");
+  });
+
+  it("should register x402 fetch with buyer-flow options", () => {
+    const program = createProgram();
+    const x402Cmd = getSubcommand(program, "x402");
+    const fetchCmd = getSubcommand(x402Cmd, "fetch");
+
+    expect(getOption(fetchCmd, "--wallet")).toBeDefined();
+    expect(getOption(fetchCmd, "--method")).toBeDefined();
+    expect(getOption(fetchCmd, "--header")).toBeDefined();
+    expect(getOption(fetchCmd, "--json-body")).toBeDefined();
+    expect(getOption(fetchCmd, "--require-asset")).toBeDefined();
+    expect(getOption(fetchCmd, "--require-issuer")).toBeDefined();
+    expect(getOption(fetchCmd, "--max-value").mandatory).toBe(true);
   });
 
   it("should register xrpl tx wait subcommand", () => {

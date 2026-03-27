@@ -18,6 +18,7 @@ A command-line interface for **Ripple USD (RLUSD)** operations across **XRP Ledg
 - **Aave lending** — Supply/borrow RLUSD on Aave V3
 - **Bridge-ready workflow** — Includes a professional Wormhole NTT bridge stub with clear status and limitations
 - **Price oracle** — Real-time RLUSD pricing from Chainlink and XRPL DEX
+- **Paid API access** — Buy access to x402-protected XRPL endpoints with a stored XRPL wallet
 - **Script-friendly** — JSON output mode for automation and CI/CD pipelines
 - **Secure key storage** — AES-256-GCM encrypted wallet files with PBKDF2 key derivation
 
@@ -99,6 +100,9 @@ rlusd send --to rDestination... --amount 100
 
 # 8. Check RLUSD price
 rlusd price
+
+# 9. Access an x402-protected XRPL API with a spending cap
+rlusd --json x402 fetch https://api.example.com/premium-feed --wallet my-xrpl --max-value 1
 ```
 
 ---
@@ -130,6 +134,10 @@ rlusd resolve asset --chain ethereum-mainnet --symbol RLUSD --json
 rlusd fiat onboarding checklist --json
 rlusd fiat buy instructions --json
 rlusd fiat redeem instructions --json
+
+# Buyer-side x402 flow
+rlusd x402 fetch https://api.example.com/premium-feed --wallet ops --max-value 1 --json
+rlusd x402 fetch https://api.example.com/chat --wallet ops --max-value 2 --method POST --json-body '{"prompt":"hello"}' --json
 
 # EVM write flow
 rlusd evm transfer prepare --chain ethereum-mainnet --from-wallet ops --to 0x... --amount 25.5 --json
@@ -762,6 +770,35 @@ rlusd fiat onboarding checklist --json
 rlusd fiat buy instructions --json
 rlusd fiat redeem instructions --json
 ```
+
+---
+
+### `rlusd x402` — Buyer-Side Paid HTTP Requests
+
+Fetch x402-protected resources as a buyer using a stored XRPL wallet. The endpoint's `accepts[]` list is the source of truth for what asset it will take; the CLI auto-selects the first compatible XRPL option that fits your cap and optional constraints.
+
+```bash
+# Buy a GET resource with a hard payment cap
+rlusd --json x402 fetch https://api.example.com/premium-feed --wallet my-xrpl --max-value 1
+
+# Buy a POST-only endpoint with a JSON body
+rlusd --json x402 fetch https://api.example.com/chat --wallet my-xrpl --max-value 2 --method POST --json-body '{"prompt":"hello"}'
+
+# Constrain payment selection to a specific issued asset and issuer
+rlusd --json x402 fetch https://api.example.com/rlusd-only --wallet my-xrpl --max-value 1 --require-asset 524C555344000000000000000000000000000000 --require-issuer rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De
+```
+
+| Option | Description |
+|--------|-------------|
+| `--wallet <name>` | Stored XRPL wallet to use for signing the x402 payment |
+| `--max-value <amount>` | **(required)** Maximum amount the CLI is allowed to pay if challenged |
+| `--method <method>` | HTTP method to use: `GET` or `POST` |
+| `--json-body <json>` | JSON request body for `POST` requests |
+| `--header <name:value ...>` | One or more additional HTTP headers to include with the request |
+| `--require-asset <asset>` | Only accept payment options for a specific XRPL asset |
+| `--require-issuer <issuer>` | Only accept payment options for a specific XRPL issuer |
+
+If the server responds with `402 Payment Required` but none of the advertised XRPL payment options fit your `--max-value` or optional constraints, the command exits with an error instead of silently paying more.
 
 ---
 
