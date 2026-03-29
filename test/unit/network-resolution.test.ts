@@ -235,6 +235,52 @@ describe("network-aware command resolution", () => {
     expect(output.ok).toBe(true);
     expect(output.chain).toBe("ethereum-sepolia");
   });
+
+  it("prepares ethereum-sepolia defi supply plans with the Sepolia RLUSD contract", async () => {
+    const { ensureConfigDir, setNetwork } = await import("../../src/config/config.js");
+    const { saveWallet } = await import("../../src/wallet/manager.js");
+    const { generateEvmWallet, serializeEvmWallet } = await import("../../src/wallet/evm-wallet.js");
+    const { RLUSD_ETH_CONTRACT_TESTNET } = await import("../../src/config/constants.js");
+
+    ensureConfigDir();
+    setNetwork("mainnet");
+    saveWallet(serializeEvmWallet("defi-ops", generateEvmWallet(), "p", "ethereum"));
+
+    const capture = captureConsole();
+
+    try {
+      const { createProgram } = await import("../../src/cli.js");
+      const program = createProgram();
+      program.exitOverride();
+      await program.parseAsync(
+        [
+          "--json",
+          "defi",
+          "supply",
+          "prepare",
+          "--chain",
+          "ethereum-sepolia",
+          "--venue",
+          "aave",
+          "--from-wallet",
+          "defi-ops",
+          "--amount",
+          "25",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      capture.restore();
+    }
+
+    expect(capture.stderr).toEqual([]);
+    const envelope = JSON.parse(capture.stdout.join("\n"));
+    expect(envelope.ok).toBe(true);
+    expect(envelope.chain).toBe("ethereum-sepolia");
+    expect(envelope.data.asset.address).toBe(RLUSD_ETH_CONTRACT_TESTNET);
+    expect(envelope.data.intent.steps[0].to).toBe(RLUSD_ETH_CONTRACT_TESTNET);
+    expect(envelope.warnings).not.toContain("mainnet");
+  });
 });
 
 describe("network-aware client resolution", () => {

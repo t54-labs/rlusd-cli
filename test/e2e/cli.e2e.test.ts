@@ -399,6 +399,47 @@ describe("CLI E2E — Full Command Tree Verification", () => {
     expect(stored).toEqual(output);
   });
 
+  it("should honor ethereum-sepolia over a persisted mainnet config when preparing a defi supply plan", async () => {
+    const setMainnet = createProgram();
+    setMainnet.exitOverride();
+    setMainnet.parse(["config", "set", "--network", "mainnet"], { from: "user" });
+
+    const gen = createProgram();
+    gen.exitOverride();
+    gen.parse(
+      ["--chain", "ethereum", "wallet", "generate", "--name", "defi-sepolia", "--password", "p", "--no-store-in-keychain"],
+      { from: "user" },
+    );
+
+    consoleOutput = [];
+    const program = createProgram();
+    program.exitOverride();
+    await program.parseAsync(
+      [
+        "--json",
+        "defi",
+        "supply",
+        "prepare",
+        "--chain",
+        "ethereum-sepolia",
+        "--venue",
+        "aave",
+        "--from-wallet",
+        "defi-sepolia",
+        "--amount",
+        "25",
+      ],
+      { from: "user" },
+    );
+
+    const output = JSON.parse(consoleOutput.join("\n"));
+    expect(output.ok).toBe(true);
+    expect(output.chain).toBe("ethereum-sepolia");
+    expect(output.data.asset.address).toBe(RLUSD_ETH_CONTRACT_TESTNET);
+    expect(output.data.intent.steps[0].to).toBe(RLUSD_ETH_CONTRACT_TESTNET);
+    expect(output.warnings).not.toContain("mainnet");
+  });
+
   it("should output bash completion script", () => {
     const program = createProgram();
     program.exitOverride();

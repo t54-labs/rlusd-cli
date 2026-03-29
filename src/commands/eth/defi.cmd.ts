@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { createWalletClient, http, parseUnits, formatUnits, maxUint256, encodeFunctionData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { getDefaultWallet, isXrplWallet, resolveWalletForChain } from "../../wallet/manager.js";
 import { decryptEvmPrivateKey } from "../../wallet/evm-wallet.js";
 import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
@@ -546,10 +546,11 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const adapter = getDefiVenueAdapter(opts.venue);
         const quote = await adapter.quoteSwap({
           chain: resolved,
-          config,
+          config: resolvedConfig,
           fromSymbol: opts.from,
           toSymbol: opts.to,
           amount: opts.amount,
@@ -611,6 +612,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = resolveWalletForChain(resolved.chain, {
           walletName: opts.fromWallet,
           optionName: "--from-wallet",
@@ -622,7 +624,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
         const adapter = getDefiVenueAdapter(opts.venue);
         const swapPlan = await adapter.buildSwapPlan({
           chain: resolved,
-          config,
+          config: resolvedConfig,
           walletName: opts.fromWallet,
           walletAddress: walletData.address as `0x${string}`,
           fromSymbol: opts.from,
@@ -674,6 +676,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
         assertExecutableDefiPlan(plan, "defi.swap", "defi.swap.execute", opts.confirmPlanId);
         const config = loadConfig();
         const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletName = plan.data.params.from;
         if (!walletName) {
           throw new Error("Prepared plan is missing swap sender.");
@@ -686,7 +689,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        const rpcUrl = resolvedConfig.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
           throw new Error(`RPC not configured for ${resolved.chain}`);
         }
@@ -769,10 +772,11 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         requireCurveLpVenue(opts.venue);
         const preview = await getDefiVenueAdapter(opts.venue).previewLp({
           chain: resolved,
-          config,
+          config: resolvedConfig,
           operation: parseLpOperation(opts.operation),
           rlusdAmount: opts.rlusdAmount,
           usdcAmount: opts.usdcAmount,
@@ -828,6 +832,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         requireCurveLpVenue(opts.venue);
         const walletData = resolveWalletForChain(resolved.chain, {
           walletName: opts.fromWallet,
@@ -839,7 +844,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
 
         const lpPlan = await getDefiVenueAdapter(opts.venue).buildLpPlan({
           chain: resolved,
-          config,
+          config: resolvedConfig,
           walletName: opts.fromWallet,
           walletAddress: walletData.address as `0x${string}`,
           operation: parseLpOperation(opts.operation),
@@ -892,6 +897,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
         assertExecutableDefiPlan(plan, "defi.lp", "defi.lp.execute", opts.confirmPlanId);
         const config = loadConfig();
         const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletName = plan.data.params.from;
         if (!walletName) {
           throw new Error("Prepared plan is missing LP sender.");
@@ -904,7 +910,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        const rpcUrl = resolvedConfig.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
           throw new Error(`RPC not configured for ${resolved.chain}`);
         }
@@ -975,6 +981,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        void resolveConfigForNetwork(resolved.network);
         const venue = getVenue(opts.venue);
         if (!venue) {
           throw new Error(`Venue ${opts.venue} is not configured on ${resolved.label}.`);
@@ -1023,6 +1030,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
       const config = loadConfig();
       try {
         const resolved = resolveEvmChainRef(resolveDefiChain(opts, program, config), config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const venue = getVenue(opts.venue);
         if (!venue || !venue.capabilities.includes("lend")) {
           throw new Error(`Venue ${opts.venue} does not support lend on ${resolved.label}.`);
@@ -1036,9 +1044,9 @@ export function registerTopLevelDefiCommand(program: Command): void {
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const amountRaw = parseUnits(opts.amount, config.rlusd.eth_decimals);
-        const asset = buildDefiAsset(config);
-        const pool = resolveAavePool(resolved.chain, config);
+        const amountRaw = parseUnits(opts.amount, resolvedConfig.rlusd.eth_decimals);
+        const asset = buildDefiAsset(resolvedConfig);
+        const pool = resolveAavePool(resolved.chain, resolvedConfig);
         const plan = await createPreparedPlan({
           command: "defi.supply.prepare",
           chain: resolved.label,
@@ -1112,6 +1120,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
         assertExecutableDefiPlan(plan, "defi.supply", "defi.supply.execute", opts.confirmPlanId);
         const config = loadConfig();
         const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletName = plan.data.params.from;
         if (!walletName) {
           throw new Error("Prepared plan is missing supply sender.");
@@ -1124,7 +1133,7 @@ export function registerTopLevelDefiCommand(program: Command): void {
           throw new Error(`Selected wallet is not an EVM wallet for ${resolved.chain}.`);
         }
 
-        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        const rpcUrl = resolvedConfig.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
           throw new Error(`RPC not configured for ${resolved.chain}`);
         }
