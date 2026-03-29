@@ -69,8 +69,6 @@ describe("Skill review regressions", () => {
   });
 
   it("returns structured trustline status data when no RLUSD trust line exists", async () => {
-    const request = vi.fn().mockResolvedValue({ result: { lines: [] } });
-
     vi.doMock("../../src/clients/xrpl-client.js", async () => {
       const actual = await vi.importActual<typeof import("../../src/clients/xrpl-client.js")>(
         "../../src/clients/xrpl-client.js",
@@ -78,7 +76,10 @@ describe("Skill review regressions", () => {
 
       return {
         ...actual,
-        getXrplClient: vi.fn().mockResolvedValue({ request }),
+        getXrplTrustlineStatus: vi.fn().mockResolvedValue({
+          present: false,
+          account_exists: true,
+        }),
         disconnectXrplClient: vi.fn().mockResolvedValue(undefined),
       };
     });
@@ -173,7 +174,7 @@ describe("Skill review regressions", () => {
       };
     });
 
-    const { loadConfig } = await import("../../src/config/config.js");
+    const { RLUSD_XRPL_ISSUER_MAINNET } = await import("../../src/config/constants.js");
     const { saveWallet } = await import("../../src/wallet/manager.js");
     const { generateXrplWallet, serializeXrplWallet } = await import("../../src/wallet/xrpl-wallet.js");
 
@@ -189,7 +190,7 @@ describe("Skill review regressions", () => {
       "--from-wallet",
       "issuer-target",
       "--to",
-      loadConfig().rlusd.xrpl_issuer,
+      RLUSD_XRPL_ISSUER_MAINNET,
       "--amount",
       "25",
     ]);

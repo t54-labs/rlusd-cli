@@ -93,6 +93,16 @@ function createDefaultConfig(env: NetworkEnvironment = "testnet"): AppConfig {
   };
 }
 
+function getRlusdDefaultsForNetwork(env: NetworkEnvironment): AppConfig["rlusd"] {
+  return {
+    xrpl_issuer: env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER,
+    xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
+    eth_contract: env === "testnet" ? RLUSD_ETH_CONTRACT_TESTNET : RLUSD_ETH_CONTRACT_MAINNET,
+    eth_decimals: RLUSD_ETH_DECIMALS,
+    chainlink_oracle: CHAINLINK_RLUSD_USD_ORACLE,
+  };
+}
+
 export function ensureConfigDir(): void {
   const configDir = getConfigDir();
   if (!existsSync(configDir)) {
@@ -187,6 +197,24 @@ export function loadConfig(): AppConfig {
   });
 }
 
+export function resolveConfigForNetwork(network?: NetworkEnvironment): AppConfig {
+  const config = loadConfig();
+  if (!network || network === config.environment) {
+    return config;
+  }
+
+  const preset = getNetworkPreset(network);
+  return {
+    ...config,
+    environment: network,
+    chains: structuredClone(preset.chains),
+    rlusd: {
+      ...config.rlusd,
+      ...getRlusdDefaultsForNetwork(network),
+    },
+  };
+}
+
 export function saveConfig(config: AppConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
@@ -199,13 +227,7 @@ export function setNetwork(env: NetworkEnvironment): AppConfig {
   const preset = getNetworkPreset(env);
   config.environment = env;
   config.chains = mergeChains(config.chains, preset.chains);
-  config.rlusd = {
-    ...config.rlusd,
-    xrpl_issuer: env === "testnet" ? RLUSD_XRPL_ISSUER_TESTNET : RLUSD_XRPL_ISSUER,
-    xrpl_currency: RLUSD_XRPL_CURRENCY_HEX,
-    eth_contract:
-      env === "testnet" ? RLUSD_ETH_CONTRACT_TESTNET : RLUSD_ETH_CONTRACT_MAINNET,
-  };
+  config.rlusd = { ...config.rlusd, ...getRlusdDefaultsForNetwork(env) };
   saveConfig(config);
   return config;
 }

@@ -10,7 +10,7 @@ import {
 } from "../../clients/xrpl-client.js";
 import { getDefaultWallet, resolveWalletForChain } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import { createPreparedPlan, loadPreparedPlan } from "../../plans/index.js";
@@ -84,11 +84,12 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
       try {
         const chainInput = opts.chain || (program.opts().chain as string | undefined) || "xrpl";
         const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         if (!validateAddress(opts.address, "xrpl")) {
           throw new Error(`Invalid XRPL address: ${opts.address}`);
         }
         const limit = normalizeIssuedTokenAmount(opts.limit, "Limit");
-        const asset = buildXrplAsset(config);
+        const asset = buildXrplAsset(resolvedConfig);
 
         const plan = await createPreparedPlan({
           command: "xrpl.trustline.prepare",

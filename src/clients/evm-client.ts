@@ -1,6 +1,6 @@
 import { createPublicClient, http, formatUnits, type PublicClient, type Chain } from "viem";
 import { mainnet, sepolia, base, optimism, baseSepolia, optimismSepolia } from "viem/chains";
-import { loadConfig } from "../config/config.js";
+import { resolveConfigForNetwork } from "../config/config.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
 import type { EvmChainName, NetworkEnvironment } from "../types/index.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm-support.js";
@@ -85,14 +85,14 @@ export function getEvmPublicClient(
   chain: EvmChainName,
   network?: NetworkEnvironment,
 ): PublicClient {
-  const config = loadConfig();
+  const config = resolveConfigForNetwork(network);
   const rpcUrl = config.chains[chain]?.rpc;
 
   if (!rpcUrl) {
     throw new Error(`RPC URL not configured for ${chain}. Run: rlusd config set --chain ${chain} --rpc <url>`);
   }
 
-  const resolvedNetwork = network ?? config.environment;
+  const resolvedNetwork = config.environment;
   const cacheKey = `${chain}:${resolvedNetwork}:${rpcUrl}`;
   if (clientCache.has(cacheKey)) {
     return clientCache.get(cacheKey)!;
@@ -115,10 +115,11 @@ export function getEvmPublicClient(
 export async function getEvmRlusdBalance(
   chain: EvmChainName,
   address: string,
+  network?: NetworkEnvironment,
 ): Promise<{ rlusd: string; native: string; nativeSymbol: string }> {
-  const config = loadConfig();
+  const config = resolveConfigForNetwork(network);
   assertActiveRlusdEvmChain(chain);
-  const client = getEvmPublicClient(chain);
+  const client = getEvmPublicClient(chain, config.environment);
   const contractAddress = getRlusdContractAddress(chain, config);
   const accountAddress = address as `0x${string}`;
 
@@ -142,8 +143,9 @@ export async function getEvmRlusdBalance(
 export async function getEvmNativeBalance(
   chain: EvmChainName,
   address: string,
+  network?: NetworkEnvironment,
 ): Promise<{ native: string; nativeSymbol: string }> {
-  const client = getEvmPublicClient(chain);
+  const client = getEvmPublicClient(chain, network);
   const accountAddress = address as `0x${string}`;
   const nativeRaw = await client.getBalance({ address: accountAddress });
   return {
