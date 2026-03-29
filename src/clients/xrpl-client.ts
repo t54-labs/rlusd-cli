@@ -1,7 +1,6 @@
 import xrpl from "xrpl";
 const { Client } = xrpl;
-import { loadConfig } from "../config/config.js";
-import { getNetworkPreset } from "../config/networks.js";
+import { resolveConfigForNetwork } from "../config/config.js";
 import type { NetworkEnvironment } from "../types/index.js";
 import { normalizeXrplTransactionHash } from "../utils/address.js";
 
@@ -55,10 +54,8 @@ export function resolveXrplChainRef(
 }
 
 export async function getXrplClient(network?: NetworkEnvironment): Promise<XrplClientInstance> {
-  const config = loadConfig();
-  const url = network
-    ? getNetworkPreset(network).chains.xrpl.websocket
-    : config.chains.xrpl?.websocket;
+  const config = resolveConfigForNetwork(network);
+  const url = config.chains.xrpl?.websocket;
 
   if (!url) {
     throw new Error("XRPL WebSocket URL not configured. Run: rlusd config set --chain xrpl --rpc <url>");
@@ -88,7 +85,7 @@ export async function disconnectXrplClient(): Promise<void> {
 
 export async function getXrplBalance(address: string): Promise<{ xrp: string; rlusd: string }> {
   const client = await getXrplClient();
-  const config = loadConfig();
+  const config = resolveConfigForNetwork();
 
   let xrpBalance: string;
   let rlusdBalance = "0";
@@ -174,7 +171,7 @@ export async function getXrplTrustlineStatus(
   frozen?: boolean;
 }> {
   const client = await getXrplClient(network);
-  const config = loadConfig();
+  const config = resolveConfigForNetwork(network);
 
   try {
     const lines = await client.request({

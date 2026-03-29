@@ -5,7 +5,7 @@ import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../clients
 import { isXrplWallet, resolveWalletForChain } from "../wallet/manager.js";
 import { restoreXrplWallet } from "../wallet/xrpl-wallet.js";
 import { decryptEvmPrivateKey } from "../wallet/evm-wallet.js";
-import { loadConfig } from "../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../config/config.js";
 import { detectChainFromAddress, validateAddress } from "../utils/address.js";
 import { createErrorEnvelope, createSuccessEnvelope } from "../agent/envelope.js";
 import { logger } from "../utils/logger.js";
@@ -152,6 +152,7 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
           throw new Error("The --chain option is required.");
         }
         const resolved = resolveEvmChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         if (!validateAddress(opts.to, resolved.chain)) {
           throw new Error(`Invalid recipient address for ${resolved.chain}: ${opts.to}`);
         }
@@ -160,8 +161,8 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
           optionName: "--from-wallet",
         });
 
-        const contractAddress = getRlusdContractAddress(resolved.chain, config);
-        const amountRaw = toErc20Units(opts.amount, config.rlusd.eth_decimals);
+        const contractAddress = getRlusdContractAddress(resolved.chain, resolvedConfig);
+        const amountRaw = toErc20Units(opts.amount, resolvedConfig.rlusd.eth_decimals);
         const plan = await createPreparedPlan({
           command: "evm.transfer.prepare",
           chain: resolved.label,
@@ -169,7 +170,7 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
           action: "evm.transfer",
           requires_confirmation: resolved.network === "mainnet",
           human_summary: `Transfer ${opts.amount} RLUSD from ${opts.fromWallet} to ${opts.to} on ${resolved.displayName}`,
-          asset: buildEvmAsset(resolved.chain, contractAddress, config.rlusd.eth_decimals),
+          asset: buildEvmAsset(resolved.chain, contractAddress, resolvedConfig.rlusd.eth_decimals),
           params: {
             from: opts.fromWallet,
             to: opts.to,
@@ -225,6 +226,7 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
 
         const config = loadConfig();
         const resolved = resolveEvmChainRef(plan.chain, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletName = requirePlanParam("evm.transfer.execute", plan.data.params, "from");
         const walletData = resolveWalletForChain(resolved.chain, {
           walletName,
@@ -240,7 +242,7 @@ export function registerEvmTransferCommand(parent: Command, program: Command): v
           walletName,
         });
         const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, password);
-        const rpcUrl = config.chains[resolved.chain]?.rpc;
+        const rpcUrl = resolvedConfig.chains[resolved.chain]?.rpc;
         if (!rpcUrl) {
           throw new Error(`RPC not configured for ${resolved.chain}`);
         }

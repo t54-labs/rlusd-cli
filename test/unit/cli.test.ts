@@ -1,7 +1,26 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createProgram } from "../../src/cli.js";
 
+const TEST_HOME = join(tmpdir(), `rlusd-cli-test-${Date.now()}`);
+
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return { ...actual, homedir: () => TEST_HOME };
+});
+
 describe("CLI Program", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_HOME, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true });
+    process.exitCode = 0;
+  });
+
   it("should create a program with correct name", () => {
     const program = createProgram();
     expect(program.name()).toBe("rlusd");

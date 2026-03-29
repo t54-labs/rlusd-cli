@@ -9,7 +9,7 @@ import {
   getXrplTrustlineStatus,
   resolveXrplChainRef,
 } from "../../clients/xrpl-client.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { createPreparedPlan, loadPreparedPlan } from "../../plans/index.js";
 import type { ResolvedAsset, StoredXrplWallet } from "../../types/index.js";
 import { validateAddress } from "../../utils/address.js";
@@ -85,6 +85,7 @@ export function registerPaymentCommand(parent: Command, program: Command): void 
       try {
         const chainInput = opts.chain || (program.opts().chain as string | undefined) || "xrpl";
         const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         if (!validateAddress(opts.to, "xrpl")) {
           throw new Error(`Invalid XRPL address: ${opts.to}`);
         }
@@ -94,7 +95,7 @@ export function registerPaymentCommand(parent: Command, program: Command): void 
           optionName: "--from-wallet",
         }) as StoredXrplWallet;
         const amount = normalizeIssuedTokenAmount(opts.amount, "Amount");
-        const asset = buildXrplAsset(config);
+        const asset = buildXrplAsset(resolvedConfig);
         const destinationTrustline =
           opts.to === asset.issuer
             ? { present: true, account_exists: true }
