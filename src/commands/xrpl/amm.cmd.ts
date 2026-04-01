@@ -2,10 +2,10 @@ import { Command } from "commander";
 import type { AMMDeposit, AMMWithdraw, AMMVote } from "xrpl";
 import xrplPkg from "xrpl";
 const { AMMDepositFlags, AMMWithdrawFlags, xrpToDrops } = xrplPkg;
-import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
+import { getXrplClient, disconnectXrplClient, resolveXrplChainRef } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
@@ -40,9 +40,12 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .action(async () => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const outputFormat = getOutputFormat(program, config.output_format);
-        const client = await getXrplClient();
-        const { assetXrp, assetRlusd } = poolAssets(config);
+        const client = await getXrplClient(resolved.network);
+        const { assetXrp, assetRlusd } = poolAssets(resolvedConfig);
 
         const res = await client.request({
           command: "amm_info",
@@ -94,6 +97,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured.");
@@ -105,8 +111,8 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
-        const { assetXrp, assetRlusd } = poolAssets(config);
+        const client = await getXrplClient(resolved.network);
+        const { assetXrp, assetRlusd } = poolAssets(resolvedConfig);
 
         const tx: AMMDeposit = {
           TransactionType: "AMMDeposit",
@@ -115,8 +121,8 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           Asset2: assetRlusd,
           Amount: xrpToDrops(opts.xrp),
           Amount2: {
-            currency: config.rlusd.xrpl_currency,
-            issuer: config.rlusd.xrpl_issuer,
+            currency: resolvedConfig.rlusd.xrpl_currency,
+            issuer: resolvedConfig.rlusd.xrpl_issuer,
             value: opts.rlusd,
           },
           Flags: AMMDepositFlags.tfTwoAsset,
@@ -154,6 +160,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured.");
@@ -165,8 +174,8 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
-        const { assetXrp, assetRlusd } = poolAssets(config);
+        const client = await getXrplClient(resolved.network);
+        const { assetXrp, assetRlusd } = poolAssets(resolvedConfig);
 
         const info = await client.request({
           command: "amm_info",
@@ -221,6 +230,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured.");
@@ -239,8 +251,8 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
-        const { assetXrp, assetRlusd } = poolAssets(config);
+        const client = await getXrplClient(resolved.network);
+        const { assetXrp, assetRlusd } = poolAssets(resolvedConfig);
 
         const tx: AMMVote = {
           TransactionType: "AMMVote",
@@ -282,6 +294,9 @@ export function registerAmmCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured.");
@@ -293,8 +308,8 @@ export function registerAmmCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
-        const { assetXrp, assetRlusd } = poolAssets(config);
+        const client = await getXrplClient(resolved.network);
+        const { assetXrp, assetRlusd } = poolAssets(resolvedConfig);
 
         const tx: AMMDeposit = {
           TransactionType: "AMMDeposit",

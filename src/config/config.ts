@@ -129,6 +129,10 @@ function applyRuntimeOverrides(config: AppConfig): AppConfig {
       ...config,
       environment: runtimeNetwork,
       chains: mergeChains(config.chains, preset.chains),
+      rlusd: {
+        ...config.rlusd,
+        ...getRlusdDefaultsForNetwork(runtimeNetwork),
+      },
     };
   }
 

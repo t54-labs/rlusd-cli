@@ -1,9 +1,9 @@
 import { Command } from "commander";
 import type { OfferCreate, OfferCancel } from "xrpl";
-import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
+import { getXrplClient, disconnectXrplClient, resolveXrplChainRef } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
 import { restoreXrplWallet } from "../../wallet/xrpl-wallet.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { StoredXrplWallet, OutputFormat } from "../../types/index.js";
@@ -73,6 +73,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured. Run: rlusd wallet generate --chain xrpl");
@@ -84,7 +87,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
+        const client = await getXrplClient(resolved.network);
 
         const takerGetsXrp = xrpDropsFromAmountTimesPrice(opts.amount, opts.price);
         const offer: OfferCreate = {
@@ -93,7 +96,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           TakerGets: takerGetsXrp,
           TakerPays: {
             currency: config.rlusd.xrpl_currency,
-            issuer: config.rlusd.xrpl_issuer,
+            issuer: resolvedConfig.rlusd.xrpl_issuer,
             value: opts.amount,
           },
         };
@@ -132,6 +135,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
     .action(async (opts) => {
       try {
         const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured. Run: rlusd wallet generate --chain xrpl");
@@ -143,7 +149,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
+        const client = await getXrplClient(resolved.network);
 
         const takerPaysXrp = xrpDropsFromAmountTimesPrice(opts.amount, opts.price);
         const offer: OfferCreate = {
@@ -151,7 +157,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           Account: wallet.address,
           TakerGets: {
             currency: config.rlusd.xrpl_currency,
-            issuer: config.rlusd.xrpl_issuer,
+            issuer: resolvedConfig.rlusd.xrpl_issuer,
             value: opts.amount,
           },
           TakerPays: takerPaysXrp,
@@ -189,6 +195,9 @@ export function registerDexCommand(parent: Command, program: Command): void {
     )
     .action(async (opts) => {
       try {
+        const config = loadConfig();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
         const walletData = getDefaultWallet("xrpl") as StoredXrplWallet | null;
         if (!walletData) {
           logger.error("No XRPL wallet configured.");
@@ -207,7 +216,7 @@ export function registerDexCommand(parent: Command, program: Command): void {
           walletName: walletData.name,
         });
         const wallet = restoreXrplWallet(walletData, password);
-        const client = await getXrplClient();
+        const client = await getXrplClient(resolved.network);
 
         const cancel: OfferCancel = {
           TransactionType: "OfferCancel",
@@ -243,11 +252,14 @@ export function registerDexCommand(parent: Command, program: Command): void {
       try {
         const config = loadConfig();
         const outputFormat = getOutputFormat(program, config.output_format);
-        const client = await getXrplClient();
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
+        const client = await getXrplClient(resolved.network);
 
         const rlusdBook: { currency: string; issuer: string } = {
-          currency: config.rlusd.xrpl_currency,
-          issuer: config.rlusd.xrpl_issuer,
+          currency: resolvedConfig.rlusd.xrpl_currency,
+          issuer: resolvedConfig.rlusd.xrpl_issuer,
         };
 
         // Taker pays XRP, receives RLUSD — bids to buy RLUSD with XRP

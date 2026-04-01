@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { createErrorEnvelope, createSuccessEnvelope } from "../agent/envelope.js";
-import { loadConfig } from "../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
 import {
   getXrplClient,
@@ -13,8 +13,9 @@ import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import { RLUSD_ERC20_ABI } from "../abi/rlusd-erc20.js";
 import { formatUnits, getAbiItem } from "viem";
-import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import type { OutputFormat, EvmChainName } from "../types/index.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../utils/evm-support.js";
+import type { NetworkEnvironment } from "../types/index.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const EVM_LOG_LOOKBACK_BLOCKS = 100_000n;
@@ -39,13 +40,15 @@ export function registerTxCommand(program: Command): void {
     .action(async (hash: string, opts: { chain?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
-      const chain = (opts.chain || program.opts().chain || config.default_chain) as ChainName;
+      const chainInput = (opts.chain || program.opts().chain || config.default_chain) as string;
 
       try {
-        if (chain === "xrpl") {
-          await txStatusXrpl(hash, outputFormat);
+        if (chainInput.startsWith("xrpl")) {
+          const resolved = resolveXrplChainRef(chainInput, config.environment);
+          await txStatusXrpl(resolved.network, resolved.label, hash, outputFormat);
         } else {
-          await txStatusEvm(chain as EvmChainName, hash, outputFormat);
+          const resolved = resolveEvmChainRef(chainInput, config.environment);
+          await txStatusEvm(resolved.chain, resolved.network, resolved.label, hash, outputFormat);
         }
       } catch (err) {
         logger.error(`Transaction status failed: ${(err as Error).message}`);
@@ -63,14 +66,16 @@ export function registerTxCommand(program: Command): void {
     .action(async (opts: { chain?: string; limit?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
-      const chain = (opts.chain || program.opts().chain || config.default_chain) as ChainName;
+      const chainInput = (opts.chain || program.opts().chain || config.default_chain) as string;
       const limit = Math.min(Math.max(parseInt(opts.limit || String(DEFAULT_HISTORY_LIMIT), 10) || DEFAULT_HISTORY_LIMIT, 1), 400);
 
       try {
-        if (chain === "xrpl") {
-          await txHistoryXrpl(config, outputFormat, limit);
+        if (chainInput.startsWith("xrpl")) {
+          const resolved = resolveXrplChainRef(chainInput, config.environment);
+          await txHistoryXrpl(resolved.network, resolved.label, outputFormat, limit);
         } else {
-          await txHistoryEvm(config, chain as EvmChainName, outputFormat, limit);
+          const resolved = resolveEvmChainRef(chainInput, config.environment);
+          await txHistoryEvm(resolved.chain, resolved.network, resolved.label, outputFormat, limit);
         }
       } catch (err) {
         logger.error(`Transaction history failed: ${(err as Error).message}`);
@@ -215,8 +220,13 @@ export function registerXrplTxCommand(parent: Command, program: Command): void {
     });
 }
 
-async function txStatusXrpl(hash: string, outputFormat: OutputFormat): Promise<void> {
-  const client = await getXrplClient();
+async function txStatusXrpl(
+  network: NetworkEnvironment,
+  chainLabel: string,
+  hash: string,
+  outputFormat: OutputFormat,
+): Promise<void> {
+  const client = await getXrplClient(network);
   const res = await client.request({
     command: "tx",
     transaction: hash,
@@ -234,7 +244,7 @@ async function txStatusXrpl(hash: string, outputFormat: OutputFormat): Promise<v
       : "failed";
 
   const data = {
-    chain: "xrpl" as const,
+    chain: chainLabel,
     hash: result.hash ?? hash,
     status,
     validated,
@@ -246,7 +256,7 @@ async function txStatusXrpl(hash: string, outputFormat: OutputFormat): Promise<v
   if (outputFormat === "json" || outputFormat === "json-compact") {
     logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
   } else {
-    logger.label("Chain", "xrpl");
+    logger.label("Chain", chainLabel);
     logger.label("Hash", String(data.hash));
     logger.label("Status", data.status);
     if (data.validated) {
@@ -258,16 +268,22 @@ async function txStatusXrpl(hash: string, outputFormat: OutputFormat): Promise<v
   }
 }
 
-async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: OutputFormat): Promise<void> {
+async function txStatusEvm(
+  chain: EvmChainName,
+  network: NetworkEnvironment,
+  chainLabel: string,
+  hash: string,
+  outputFormat: OutputFormat,
+): Promise<void> {
   assertActiveRlusdEvmChain(chain);
-  const publicClient = getEvmPublicClient(chain);
+  const publicClient = getEvmPublicClient(chain, network);
   const txHash = hash as `0x${string}`;
   const receipt = await publicClient.getTransactionReceipt({ hash: txHash }).catch(() => null);
 
   if (!receipt) {
     const tx = await publicClient.getTransaction({ hash: txHash }).catch(() => null);
     const data = {
-      chain,
+      chain: chainLabel,
       hash,
       status: tx ? ("pending" as const) : ("unknown" as const),
       block_number: null as string | null,
@@ -278,7 +294,7 @@ async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: Outp
     if (outputFormat === "json" || outputFormat === "json-compact") {
       logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
     } else {
-      logger.label("Chain", chain);
+      logger.label("Chain", chainLabel);
       logger.label("Hash", hash);
       logger.label("Status", tx ? "pending (no receipt yet)" : "unknown transaction hash");
     }
@@ -287,7 +303,7 @@ async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: Outp
 
   const status: "success" | "failed" = receipt.status === "success" ? "success" : "failed";
   const data = {
-    chain,
+    chain: chainLabel,
     hash: receipt.transactionHash,
     status,
     block_number: receipt.blockNumber.toString(),
@@ -300,7 +316,7 @@ async function txStatusEvm(chain: EvmChainName, hash: string, outputFormat: Outp
   if (outputFormat === "json" || outputFormat === "json-compact") {
     logger.raw(formatOutput(data as unknown as Record<string, unknown>, outputFormat));
   } else {
-    logger.label("Chain", chain);
+    logger.label("Chain", chainLabel);
     logger.label("Hash", receipt.transactionHash);
     logger.label("Status", status);
     logger.label("Block", receipt.blockNumber.toString());
@@ -331,7 +347,8 @@ function isRlusdPayment(
 }
 
 async function txHistoryXrpl(
-  config: ReturnType<typeof loadConfig>,
+  network: NetworkEnvironment,
+  chainLabel: string,
   outputFormat: OutputFormat,
   limit: number,
 ): Promise<void> {
@@ -342,7 +359,8 @@ async function txHistoryXrpl(
     return;
   }
 
-  const client = await getXrplClient();
+  const resolvedConfig = resolveConfigForNetwork(network);
+  const client = await getXrplClient(network);
   const fetchLimit = Math.min(400, Math.max(limit * 25, limit, 50));
   const res = await client.request({
     command: "account_tx",
@@ -353,8 +371,8 @@ async function txHistoryXrpl(
   });
 
   const txs = (res.result.transactions ?? []) as Array<{ tx?: Record<string, unknown>; meta?: unknown }>;
-  const currency = config.rlusd.xrpl_currency;
-  const issuer = config.rlusd.xrpl_issuer;
+  const currency = resolvedConfig.rlusd.xrpl_currency;
+  const issuer = resolvedConfig.rlusd.xrpl_issuer;
 
   const rows: Array<Record<string, unknown>> = [];
   for (const entry of txs) {
@@ -377,7 +395,7 @@ async function txHistoryXrpl(
   }
 
   if (outputFormat === "json" || outputFormat === "json-compact") {
-    logger.raw(formatOutput({ chain: "xrpl", address: wallet.address, transactions: rows } as Record<string, unknown>, outputFormat));
+    logger.raw(formatOutput({ chain: chainLabel, address: wallet.address, transactions: rows } as Record<string, unknown>, outputFormat));
   } else if (rows.length === 0) {
     logger.info("No recent RLUSD transactions found for this wallet.");
   } else {
@@ -388,12 +406,14 @@ async function txHistoryXrpl(
 const transferEvent = getAbiItem({ abi: RLUSD_ERC20_ABI, name: "Transfer" });
 
 async function txHistoryEvm(
-  config: ReturnType<typeof loadConfig>,
   chain: EvmChainName,
+  network: NetworkEnvironment,
+  chainLabel: string,
   outputFormat: OutputFormat,
   limit: number,
 ): Promise<void> {
   assertActiveRlusdEvmChain(chain);
+  const resolvedConfig = resolveConfigForNetwork(network);
   const wallet = getDefaultWallet(chain);
   if (!wallet) {
     logger.error(`No ${chain} wallet configured. Run: rlusd wallet generate --chain ${chain}`);
@@ -401,8 +421,8 @@ async function txHistoryEvm(
     return;
   }
 
-  const publicClient = getEvmPublicClient(chain);
-  const contractAddress = getRlusdContractAddress(chain, config);
+  const publicClient = getEvmPublicClient(chain, network);
+  const contractAddress = getRlusdContractAddress(chain, resolvedConfig);
   const account = wallet.address as `0x${string}`;
   const latest = await publicClient.getBlockNumber();
   const fromBlock = latest > EVM_LOG_LOOKBACK_BLOCKS ? latest - EVM_LOG_LOOKBACK_BLOCKS : 0n;
@@ -474,7 +494,7 @@ async function txHistoryEvm(
       transactionHash,
       from: args.from,
       to: args.to,
-      value: formatUnits(args.value, config.rlusd.eth_decimals),
+      value: formatUnits(args.value, resolvedConfig.rlusd.eth_decimals),
     });
   };
 
@@ -499,7 +519,7 @@ async function txHistoryEvm(
   if (outputFormat === "json" || outputFormat === "json-compact") {
     logger.raw(
       formatOutput(
-        { chain, address: wallet.address, lookback_blocks: EVM_LOG_LOOKBACK_BLOCKS.toString(), transfers: rows } as Record<string, unknown>,
+        { chain: chainLabel, address: wallet.address, lookback_blocks: EVM_LOG_LOOKBACK_BLOCKS.toString(), transfers: rows } as Record<string, unknown>,
         outputFormat,
       ),
     );

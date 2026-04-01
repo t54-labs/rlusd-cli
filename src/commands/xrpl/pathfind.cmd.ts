@@ -1,7 +1,7 @@
 import { Command } from "commander";
-import { getXrplClient, disconnectXrplClient } from "../../clients/xrpl-client.js";
+import { getXrplClient, disconnectXrplClient, resolveXrplChainRef } from "../../clients/xrpl-client.js";
 import { getDefaultWallet } from "../../wallet/manager.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
 import type { OutputFormat } from "../../types/index.js";
@@ -20,6 +20,9 @@ export function registerPathfindCommand(parent: Command, program: Command): void
       try {
         const config = loadConfig();
         const outputFormat = getOutputFormat(program, config.output_format);
+        const chainInput = (program.opts().chain as string | undefined) || "xrpl";
+        const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
 
         const walletData = getDefaultWallet("xrpl");
         if (!walletData) {
@@ -28,11 +31,11 @@ export function registerPathfindCommand(parent: Command, program: Command): void
           return;
         }
 
-        const client = await getXrplClient();
+        const client = await getXrplClient(resolved.network);
 
         const destinationAmount = {
-          currency: config.rlusd.xrpl_currency,
-          issuer: config.rlusd.xrpl_issuer,
+          currency: resolvedConfig.rlusd.xrpl_currency,
+          issuer: resolvedConfig.rlusd.xrpl_issuer,
           value: opts.amount,
         };
 

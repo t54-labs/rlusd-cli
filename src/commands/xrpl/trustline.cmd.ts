@@ -292,6 +292,7 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
         const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
         const chainInput = (program.opts().chain as string | undefined) || "xrpl";
         const resolved = resolveXrplChainRef(chainInput, config.environment);
+        const resolvedConfig = resolveConfigForNetwork(resolved.network);
         const address = opts.address || getDefaultWallet("xrpl")?.address;
 
         if (!address) {
@@ -303,8 +304,8 @@ export function registerTrustlineCommand(parent: Command, program: Command): voi
         const trustline = await getXrplTrustlineStatus(resolved.network, address);
         const data = {
           address,
-          issuer: config.rlusd.xrpl_issuer,
-          currency: config.rlusd.xrpl_currency,
+          issuer: resolvedConfig.rlusd.xrpl_issuer,
+          currency: resolvedConfig.rlusd.xrpl_currency,
           account_exists: trustline.account_exists,
           has_trustline: trustline.present,
           balance: trustline.balance ?? null,

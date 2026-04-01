@@ -1,14 +1,15 @@
 import { Command } from "commander";
-import { loadConfig } from "../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../config/config.js";
 import { getXrplClient, disconnectXrplClient } from "../clients/xrpl-client.js";
-import { getEvmPublicClient } from "../clients/evm-client.js";
+import { getEvmPublicClient, resolveEvmChainRef } from "../clients/evm-client.js";
 import { formatOutput } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 import { CHAINLINK_AGGREGATOR_ABI } from "../abi/chainlink-aggregator.js";
 import { formatUnits } from "viem";
-import type { ChainName, OutputFormat, EvmChainName } from "../types/index.js";
+import type { ChainName, OutputFormat, EvmChainName, NetworkEnvironment } from "../types/index.js";
 import { fetchXrpUsdPrice } from "../services/price-feed.js";
 import { assertActiveRlusdEvmChain, getChainlinkOracleAddress } from "../utils/evm-support.js";
+import { resolveXrplChainRef } from "../clients/xrpl-client.js";
 
 type PriceSource = "chainlink" | "dex";
 const CHAINLINK_WARN_AGE_SECONDS = 60 * 60;
@@ -23,14 +24,14 @@ export function registerPriceCommand(program: Command): void {
     .action(async (opts: { chain?: string; source?: string }) => {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
-      const effectiveChain = (opts.chain || program.opts().chain || config.default_chain) as ChainName;
+      const effectiveChain = (opts.chain || program.opts().chain || config.default_chain) as string;
       const source: PriceSource = opts.source
         ? (opts.source as PriceSource)
-        : effectiveChain === "xrpl" ? "dex" : "chainlink";
+        : effectiveChain.startsWith("xrpl") ? "dex" : "chainlink";
 
       try {
         if (source === "dex") {
-          await showDexPrice(program, config, outputFormat);
+          await showDexPrice(program, opts, config, outputFormat);
         } else {
           await showChainlinkPrice(program, opts, config, outputFormat);
         }
@@ -52,7 +53,9 @@ export function registerPriceCommand(program: Command): void {
 
       try {
         const chainlink = await readChainlinkPrice(program, opts, config);
-        const dex = await readDexBookSummary(config);
+        const dex = await readDexBookSummary(
+          resolveConfigForNetwork(resolveDexNetwork(program, opts, config)),
+        );
         const data = {
           chainlink_usd: chainlink,
           dex_xrp_per_rlusd: dex,
@@ -94,6 +97,61 @@ function resolveChainlinkEvmChain(program: Command, opts: { chain?: string }, co
   const chain = fromOpts as EvmChainName;
   assertActiveRlusdEvmChain(chain);
   return chain;
+}
+
+function resolvePriceNetwork(
+  program: Command,
+  opts: { chain?: string },
+  config: ReturnType<typeof loadConfig>,
+): { chain: EvmChainName; network: NetworkEnvironment } {
+  const chainInput = opts.chain || (program.opts().chain as string | undefined);
+  if (!chainInput) {
+    const fallbackChain = config.default_chain === "xrpl" ? "ethereum" : config.default_chain;
+    return {
+      chain: fallbackChain as EvmChainName,
+      network: config.environment,
+    };
+  }
+
+  if (chainInput.startsWith("xrpl")) {
+    const resolved = resolveXrplChainRef(chainInput, config.environment);
+    return {
+      chain: "ethereum",
+      network: resolved.network,
+    };
+  }
+
+  if (chainInput.includes("-")) {
+    const resolved = resolveEvmChainRef(chainInput, config.environment);
+    return {
+      chain: resolved.chain,
+      network: resolved.network,
+    };
+  }
+
+  const chain = resolveChainlinkEvmChain(program, opts, config);
+  return {
+    chain,
+    network: config.environment,
+  };
+}
+
+function resolveDexNetwork(
+  program: Command,
+  opts: { chain?: string },
+  config: ReturnType<typeof loadConfig>,
+): NetworkEnvironment {
+  const chainInput = opts.chain || (program.opts().chain as string | undefined);
+  if (!chainInput) {
+    return config.environment;
+  }
+  if (chainInput.startsWith("xrpl")) {
+    return resolveXrplChainRef(chainInput, config.environment).network;
+  }
+  if (chainInput.includes("-")) {
+    return resolveEvmChainRef(chainInput, config.environment).network;
+  }
+  return config.environment;
 }
 
 async function showChainlinkPrice(
@@ -142,9 +200,11 @@ async function readChainlinkPrice(
   decimals: number | null;
   stale_warning?: string;
 }> {
-  const evmChain = resolveChainlinkEvmChain(program, opts, config);
-  const publicClient = getEvmPublicClient(evmChain);
-  const oracle = getChainlinkOracleAddress(evmChain, config);
+  const resolved = resolvePriceNetwork(program, opts, config);
+  const resolvedConfig = resolveConfigForNetwork(resolved.network);
+  const evmChain = resolved.chain;
+  const publicClient = getEvmPublicClient(evmChain, resolved.network);
+  const oracle = getChainlinkOracleAddress(evmChain, resolvedConfig);
 
   const [roundData, dec] = await Promise.all([
     publicClient.readContract({
@@ -249,7 +309,7 @@ async function readDexBookSummary(config: ReturnType<typeof loadConfig>): Promis
   bid_offer_count: number;
   ask_offer_count: number;
 }> {
-  const client = await getXrplClient();
+  const client = await getXrplClient(config.environment);
   const rlusdCur = config.rlusd.xrpl_currency;
   const rlusdIssuer = config.rlusd.xrpl_issuer;
 
@@ -303,14 +363,15 @@ async function readDexBookSummary(config: ReturnType<typeof loadConfig>): Promis
 
 async function showDexPrice(
   program: Command,
+  opts: { chain?: string },
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
-  void program;
+  const resolvedConfig = resolveConfigForNetwork(resolveDexNetwork(program, opts, config));
 
   const [summary, xrpPrice] = await Promise.all([
-    readDexBookSummary(config),
-    fetchXrpUsdPrice(config.price_api),
+    readDexBookSummary(resolvedConfig),
+    fetchXrpUsdPrice(resolvedConfig.price_api),
   ]);
 
   const midXrpPerRlusd =

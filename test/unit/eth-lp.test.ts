@@ -161,4 +161,33 @@ describe("Legacy eth lp wrappers", () => {
     const output = JSON.parse(result.stdout.join("\n"));
     expect(output.steps.map((step: { step: string }) => step.step)).toEqual(["remove_liquidity"]);
   });
+
+  it("should force curve LP quotes onto mainnet even when runtime network is testnet", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValue(1998000000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+
+    const result = await runCommand([
+      "--output",
+      "json",
+      "--network",
+      "testnet",
+      "eth",
+      "lp",
+      "quote",
+      "--venue",
+      "curve",
+      "--chain",
+      "ethereum",
+      "--operation",
+      "add",
+      "--rlusd-amount",
+      "1000",
+      "--usdc-amount",
+      "1000",
+    ]);
+
+    expect(result.stderr).toEqual([]);
+    expect(vi.mocked(getEvmPublicClient)).toHaveBeenCalledWith("ethereum", "mainnet");
+  });
 });

@@ -1,12 +1,13 @@
 import { Command } from "commander";
 import { loadConfig } from "../config/config.js";
 import { getDefaultWallet } from "../wallet/manager.js";
-import { getXrplBalance, disconnectXrplClient } from "../clients/xrpl-client.js";
+import { getXrplBalance, disconnectXrplClient, resolveXrplChainRef } from "../clients/xrpl-client.js";
 import { getEvmNativeBalance, getEvmRlusdBalance } from "../clients/evm-client.js";
 import { formatOutput, formatRlusdAmount } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
-import type { ChainName, OutputFormat, EvmChainName, BalanceResult } from "../types/index.js";
+import type { ChainName, OutputFormat, EvmChainName, BalanceResult, NetworkEnvironment } from "../types/index.js";
 import { getActiveRlusdEvmChains } from "../utils/evm-support.js";
+import { resolveEvmChainRef } from "../clients/evm-client.js";
 
 const RLUSD_EVM_CHAINS: EvmChainName[] = getActiveRlusdEvmChains();
 const NATIVE_EVM_CHAINS: EvmChainName[] = ["ethereum", "base", "optimism"];
@@ -22,13 +23,13 @@ export function registerBalanceCommand(program: Command): void {
       const config = loadConfig();
       const outputFormat = (program.opts().output as OutputFormat) || config.output_format;
       const showAll = opts.all || false;
-      const chain = (opts.chain || program.opts().chain || config.default_chain) as ChainName;
+      const chainInput = (opts.chain || program.opts().chain || config.default_chain) as string;
 
       try {
         if (showAll) {
           await queryAllChains(outputFormat, opts.address);
         } else {
-          await querySingleChain(chain, outputFormat, opts.address);
+          await querySingleChain(chainInput, config.environment, outputFormat, opts.address);
         }
       } catch (err) {
         logger.error(`Balance query failed: ${(err as Error).message}`);
@@ -84,18 +85,52 @@ export function registerBalanceCommand(program: Command): void {
     });
 }
 
-async function querySingleChain(chain: ChainName, outputFormat: OutputFormat, addressOverride?: string): Promise<void> {
-  const address = addressOverride || getDefaultWallet(chain)?.address;
+type ResolvedBalanceChain =
+  | { chain: "xrpl"; label: string; network: NetworkEnvironment }
+  | { chain: EvmChainName; label: string; network: NetworkEnvironment };
+
+function resolveBalanceChain(
+  chainInput: string,
+  defaultNetwork: NetworkEnvironment,
+): ResolvedBalanceChain {
+  if (chainInput.startsWith("xrpl")) {
+    const resolved = resolveXrplChainRef(chainInput, defaultNetwork);
+    return { chain: "xrpl", label: resolved.label, network: resolved.network };
+  }
+
+  if (chainInput.includes("-")) {
+    const resolved = resolveEvmChainRef(chainInput, defaultNetwork);
+    return { chain: resolved.chain, label: resolved.label, network: resolved.network };
+  }
+
+  const chain = chainInput as ChainName;
+  if (chain === "xrpl") {
+    const resolved = resolveXrplChainRef(chain, defaultNetwork);
+    return { chain: "xrpl", label: resolved.label, network: resolved.network };
+  }
+
+  const resolved = resolveEvmChainRef(chain, defaultNetwork);
+  return { chain: resolved.chain, label: resolved.label, network: resolved.network };
+}
+
+async function querySingleChain(
+  chainInput: string,
+  defaultNetwork: NetworkEnvironment,
+  outputFormat: OutputFormat,
+  addressOverride?: string,
+): Promise<void> {
+  const resolved = resolveBalanceChain(chainInput, defaultNetwork);
+  const address = addressOverride || getDefaultWallet(resolved.chain)?.address;
   if (!address) {
-    logger.error(`No wallet for ${chain}. Use 'rlusd wallet generate --chain ${chain}'`);
+    logger.error(`No wallet for ${resolved.chain}. Use 'rlusd wallet generate --chain ${resolved.chain}'`);
     process.exitCode = 1;
     return;
   }
 
-  if (chain === "xrpl") {
-    const { xrp, rlusd } = await getXrplBalance(address);
+  if (resolved.chain === "xrpl") {
+    const { xrp, rlusd } = await getXrplBalance(address, resolved.network);
     const result: BalanceResult = {
-      chain: "xrpl",
+      chain: resolved.label as ChainName,
       address,
       rlusd_balance: rlusd,
       native_balance: xrp,
@@ -104,15 +139,19 @@ async function querySingleChain(chain: ChainName, outputFormat: OutputFormat, ad
     if (outputFormat === "json" || outputFormat === "json-compact") {
       logger.raw(formatOutput(result as unknown as Record<string, unknown>, outputFormat));
     } else {
-      logger.label("Chain", "XRPL");
+      logger.label("Chain", resolved.label);
       logger.label("Address", address);
       logger.label("RLUSD", formatRlusdAmount(rlusd));
       logger.label("XRP", xrp);
     }
   } else {
-    const { rlusd, native, nativeSymbol } = await getEvmRlusdBalance(chain as EvmChainName, address);
+    const { rlusd, native, nativeSymbol } = await getEvmRlusdBalance(
+      resolved.chain,
+      address,
+      resolved.network,
+    );
     const result: BalanceResult = {
-      chain,
+      chain: resolved.label as ChainName,
       address,
       rlusd_balance: rlusd,
       native_balance: native,
@@ -121,7 +160,7 @@ async function querySingleChain(chain: ChainName, outputFormat: OutputFormat, ad
     if (outputFormat === "json" || outputFormat === "json-compact") {
       logger.raw(formatOutput(result as unknown as Record<string, unknown>, outputFormat));
     } else {
-      logger.label("Chain", chain);
+      logger.label("Chain", resolved.label);
       logger.label("Address", address);
       logger.label("RLUSD", formatRlusdAmount(rlusd));
       logger.label(nativeSymbol, native);
