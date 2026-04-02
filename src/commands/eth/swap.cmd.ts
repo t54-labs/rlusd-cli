@@ -325,13 +325,18 @@ async function executeSwapSell(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
+  const resolved = resolveVenueChainRef(chain, "uniswap", config);
   const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = resolveUniswapRouter(chain, config);
   const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const slippageBps = parseSlippageBps(opts.slippage);
   const fee = parseFeeTier(opts.feeTier);
 
-  const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
+  const { walletClient, account, publicClient } = await getWalletContext(
+    resolved,
+    opts.password,
+    config,
+  );
   const quoteResult = await publicClient.simulateContract({
     address: resolveUniswapQuoter(chain, config),
     abi: UNISWAP_QUOTER_V2_ABI,
@@ -431,12 +436,17 @@ async function executeSwapBuy(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
+  const resolved = resolveVenueChainRef(chain, "uniswap", config);
   const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = resolveUniswapRouter(chain, config);
   const fee = parseFeeTier(opts.feeTier);
   const slippageBps = parseSlippageBps(opts.slippage);
 
-  const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
+  const { walletClient, account, publicClient } = await getWalletContext(
+    resolved,
+    opts.password,
+    config,
+  );
 
   const amountOut = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const quoteResult = await publicClient.simulateContract({
