@@ -3,7 +3,7 @@ import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { getEvmPublicClient, getViemChain, resolveEvmChainRef } from "../../clients/evm-client.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, resolveConfigForNetwork } from "../../config/config.js";
 import { executePreparedDefiPlan } from "../../defi/executor.js";
 import { getDefiVenueAdapter } from "../../defi/venues/index.js";
 import { formatOutput } from "../../utils/format.js";
@@ -80,6 +80,7 @@ function buildLegacyPlan(input: {
 
 async function executeLpPlan(input: {
   chain: EvmChainName;
+  chainRef: ReturnType<typeof resolveVenueChainRef>;
   command: string;
   plan: ReturnType<typeof buildLegacyPlan>;
   password?: string;
@@ -104,10 +105,10 @@ async function executeLpPlan(input: {
   const account = privateKeyToAccount(privateKey as `0x${string}`);
   const walletClient = createWalletClient({
     account,
-    chain: getViemChain(input.chain, input.config.environment),
+    chain: getViemChain(input.chainRef.chain, input.chainRef.network),
     transport: http(rpcUrl),
   });
-  const publicClient = getEvmPublicClient(input.chain);
+  const publicClient = getEvmPublicClient(input.chainRef.chain, input.chainRef.network);
 
   return executePreparedDefiPlan({
     callerLabel: input.command,
@@ -138,9 +139,11 @@ export function registerLpCommand(parent: Command, program: Command): void {
       try {
         requireCurveVenue(opts.venue);
         const chain = resolveLegacyChain(opts.chain, program);
+        const chainRef = resolveVenueChainRef(chain);
+        const resolvedConfig = resolveConfigForNetwork(chainRef.network);
         const preview = await getDefiVenueAdapter(opts.venue).previewLp({
-          chain: resolveVenueChainRef(chain),
-          config,
+          chain: chainRef,
+          config: resolvedConfig,
           operation: parseLpOperation(opts.operation),
           rlusdAmount: opts.rlusdAmount,
           usdcAmount: opts.usdcAmount,
@@ -174,6 +177,8 @@ export function registerLpCommand(parent: Command, program: Command): void {
       try {
         requireCurveVenue(opts.venue);
         const chain = resolveLegacyChain(opts.chain, program);
+        const chainRef = resolveVenueChainRef(chain);
+        const resolvedConfig = resolveConfigForNetwork(chainRef.network);
         const wallet = resolveWalletForChain(chain, {
           walletName: opts.fromWallet,
           optionName: "--from-wallet",
@@ -183,8 +188,8 @@ export function registerLpCommand(parent: Command, program: Command): void {
         }
 
         const lpPlan = await getDefiVenueAdapter(opts.venue).buildLpPlan({
-          chain: resolveVenueChainRef(chain),
-          config,
+          chain: chainRef,
+          config: resolvedConfig,
           walletName: wallet.name,
           walletAddress: wallet.address as `0x${string}`,
           operation: "add",
@@ -209,10 +214,11 @@ export function registerLpCommand(parent: Command, program: Command): void {
 
         const results = await executeLpPlan({
           chain,
+          chainRef,
           command: "eth.lp.add",
           plan: buildLegacyPlan({
             command: "eth.lp.add",
-            chain: resolveVenueChainRef(chain).label,
+            chain: chainRef.label,
             action: "defi.lp",
             human_summary: lpPlan.human_summary,
             asset: lpPlan.asset,
@@ -221,7 +227,7 @@ export function registerLpCommand(parent: Command, program: Command): void {
             warnings: lpPlan.warnings,
           }),
           password: opts.password,
-          config,
+          config: resolvedConfig,
         });
         logger.raw(formatOutput({ venue: "curve", operation: "add", steps: results }, outputFormat));
       } catch (error) {
@@ -250,6 +256,8 @@ export function registerLpCommand(parent: Command, program: Command): void {
       try {
         requireCurveVenue(opts.venue);
         const chain = resolveLegacyChain(opts.chain, program);
+        const chainRef = resolveVenueChainRef(chain);
+        const resolvedConfig = resolveConfigForNetwork(chainRef.network);
         const wallet = resolveWalletForChain(chain, {
           walletName: opts.fromWallet,
           optionName: "--from-wallet",
@@ -259,8 +267,8 @@ export function registerLpCommand(parent: Command, program: Command): void {
         }
 
         const lpPlan = await getDefiVenueAdapter(opts.venue).buildLpPlan({
-          chain: resolveVenueChainRef(chain),
-          config,
+          chain: chainRef,
+          config: resolvedConfig,
           walletName: wallet.name,
           walletAddress: wallet.address as `0x${string}`,
           operation: "remove",
@@ -285,10 +293,11 @@ export function registerLpCommand(parent: Command, program: Command): void {
 
         const results = await executeLpPlan({
           chain,
+          chainRef,
           command: "eth.lp.remove",
           plan: buildLegacyPlan({
             command: "eth.lp.remove",
-            chain: resolveVenueChainRef(chain).label,
+            chain: chainRef.label,
             action: "defi.lp",
             human_summary: lpPlan.human_summary,
             asset: lpPlan.asset,
@@ -297,7 +306,7 @@ export function registerLpCommand(parent: Command, program: Command): void {
             warnings: lpPlan.warnings,
           }),
           password: opts.password,
-          config,
+          config: resolvedConfig,
         });
         logger.raw(formatOutput({ venue: "curve", operation: "remove", steps: results }, outputFormat));
       } catch (error) {

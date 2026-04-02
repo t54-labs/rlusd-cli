@@ -12,11 +12,20 @@ vi.mock("node:os", async () => {
 });
 
 describe("CLI Program", () => {
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+
   beforeEach(() => {
     mkdirSync(TEST_HOME, { recursive: true });
+    originalLog = console.log;
+    originalError = console.error;
+    console.log = () => undefined;
+    console.error = () => undefined;
   });
 
   afterEach(() => {
+    console.log = originalLog;
+    console.error = originalError;
     rmSync(TEST_HOME, { recursive: true, force: true });
     process.exitCode = 0;
   });
@@ -39,20 +48,10 @@ describe("CLI Program", () => {
   });
 
   it("should accept --json as a machine output flag", () => {
-    const originalLog = console.log;
-    const originalError = console.error;
-    console.log = () => undefined;
-    console.error = () => undefined;
-
-    try {
-      const program = createProgram();
-      program.exitOverride();
-      program.parse(["--json", "config", "get"], { from: "user" });
-      expect(program.opts().json).toBe(true);
-    } finally {
-      console.log = originalLog;
-      console.error = originalError;
-    }
+    const program = createProgram();
+    program.exitOverride();
+    program.parse(["--json", "config", "get"], { from: "user" });
+    expect(program.opts().json).toBe(true);
   });
 
   it("should default --output to table", () => {

@@ -121,4 +121,31 @@ describe("Legacy eth swap wrappers", () => {
     expect(result.stderr.join("\n")).toContain("RLUSD");
     expect(result.stderr.join("\n")).toContain("USDC");
   });
+
+  it("should force curve quotes onto mainnet even when runtime network is testnet", async () => {
+    const publicClient = makePublicClient();
+    publicClient.readContract.mockResolvedValue(99950000n);
+    vi.mocked(getEvmPublicClient).mockReturnValue(publicClient as never);
+
+    const result = await runCommand([
+      "--output",
+      "json",
+      "--network",
+      "testnet",
+      "eth",
+      "swap",
+      "quote",
+      "--venue",
+      "curve",
+      "--chain",
+      "ethereum",
+      "--amount",
+      "100",
+      "--for",
+      "USDC",
+    ]);
+
+    expect(result.stderr).toEqual([]);
+    expect(vi.mocked(getEvmPublicClient)).toHaveBeenCalledWith("ethereum", "mainnet");
+  });
 });

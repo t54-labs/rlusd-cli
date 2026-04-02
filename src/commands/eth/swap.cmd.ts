@@ -10,7 +10,12 @@ import { UNISWAP_V3_ROUTER_ABI, UNISWAP_QUOTER_V2_ABI } from "../../abi/uniswap-
 import { WELL_KNOWN_TOKENS } from "../../config/constants.js";
 import { logger } from "../../utils/logger.js";
 import { formatOutput } from "../../utils/format.js";
-import type { EvmChainName, LoadedPreparedPlan, OutputFormat, StoredEvmWallet } from "../../types/index.js";
+import type {
+  EvmChainName,
+  LoadedPreparedPlan,
+  OutputFormat,
+  StoredEvmWallet,
+} from "../../types/index.js";
 import { resolveWalletPassword, getWalletPasswordEnvVarName } from "../../utils/secrets.js";
 import { assertActiveRlusdEvmChain, getRlusdContractAddress } from "../../utils/evm-support.js";
 import { executePreparedDefiPlan } from "../../defi/executor.js";
@@ -209,7 +214,7 @@ function parseSlippageBps(raw: string | undefined): number {
 }
 
 async function getWalletContext(
-  chain: EvmChainName,
+  chainRef: ReturnType<typeof resolveVenueChainRef>,
   password: string | undefined,
   config: ReturnType<typeof loadConfig>,
 ): Promise<{
@@ -218,19 +223,19 @@ async function getWalletContext(
   publicClient: ReturnType<typeof getEvmPublicClient>;
   walletName: string;
 }> {
-  const walletData = getDefaultWallet(chain);
+  const walletData = getDefaultWallet(chainRef.chain);
   if (!walletData || isXrplWallet(walletData)) {
-    throw new Error(`No EVM wallet for ${chain}. Run: rlusd wallet generate --chain ${chain}`);
+    throw new Error(`No EVM wallet for ${chainRef.chain}. Run: rlusd wallet generate --chain ${chainRef.chain}`);
   }
   const pwd = resolveWalletPassword(password, { walletName: walletData.name });
   const privateKey = decryptEvmPrivateKey(walletData as StoredEvmWallet, pwd);
-  const viemChain = getViemChain(chain, config.environment);
-  const rpcUrl = config.chains[chain]?.rpc;
-  if (!rpcUrl) throw new Error(`RPC not configured for ${chain}`);
+  const viemChain = getViemChain(chainRef.chain, chainRef.network);
+  const rpcUrl = config.chains[chainRef.chain]?.rpc;
+  if (!rpcUrl) throw new Error(`RPC not configured for ${chainRef.chain}`);
 
   const account = privateKeyToAccount(privateKey as `0x${string}`);
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(rpcUrl) });
-  const publicClient = getEvmPublicClient(chain);
+  const publicClient = getEvmPublicClient(chainRef.chain, chainRef.network);
   return { walletClient, account, publicClient, walletName: walletData.name };
 }
 
@@ -241,7 +246,11 @@ async function executeAdapterSell(
   outputFormat: OutputFormat,
 ): Promise<void> {
   const resolved = resolveVenueChainRef(chain, opts.venue, config);
-  const { walletClient, account, publicClient, walletName } = await getWalletContext(chain, opts.password, config);
+  const { walletClient, account, publicClient, walletName } = await getWalletContext(
+    resolved,
+    opts.password,
+    config,
+  );
   const swapPlan = await getDefiVenueAdapter(opts.venue).buildSwapPlan({
     chain: resolved,
     config,
@@ -316,13 +325,18 @@ async function executeSwapSell(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
+  const resolved = resolveVenueChainRef(chain, "uniswap", config);
   const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = resolveUniswapRouter(chain, config);
   const amountIn = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const slippageBps = parseSlippageBps(opts.slippage);
   const fee = parseFeeTier(opts.feeTier);
 
-  const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
+  const { walletClient, account, publicClient } = await getWalletContext(
+    resolved,
+    opts.password,
+    config,
+  );
   const quoteResult = await publicClient.simulateContract({
     address: resolveUniswapQuoter(chain, config),
     abi: UNISWAP_QUOTER_V2_ABI,
@@ -422,12 +436,17 @@ async function executeSwapBuy(
   config: ReturnType<typeof loadConfig>,
   outputFormat: OutputFormat,
 ): Promise<void> {
+  const resolved = resolveVenueChainRef(chain, "uniswap", config);
   const rlusdAddress = getRlusdContractAddress(chain, config);
   const routerAddress = resolveUniswapRouter(chain, config);
   const fee = parseFeeTier(opts.feeTier);
   const slippageBps = parseSlippageBps(opts.slippage);
 
-  const { walletClient, account, publicClient } = await getWalletContext(chain, opts.password, config);
+  const { walletClient, account, publicClient } = await getWalletContext(
+    resolved,
+    opts.password,
+    config,
+  );
 
   const amountOut = parseUnits(opts.amount, config.rlusd.eth_decimals);
   const quoteResult = await publicClient.simulateContract({

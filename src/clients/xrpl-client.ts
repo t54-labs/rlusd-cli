@@ -83,9 +83,12 @@ export async function disconnectXrplClient(): Promise<void> {
   }
 }
 
-export async function getXrplBalance(address: string): Promise<{ xrp: string; rlusd: string }> {
-  const client = await getXrplClient();
-  const config = resolveConfigForNetwork();
+export async function getXrplBalance(
+  address: string,
+  network?: NetworkEnvironment,
+): Promise<{ xrp: string; rlusd: string }> {
+  const client = await getXrplClient(network);
+  const config = resolveConfigForNetwork(network);
 
   let xrpBalance: string;
   let rlusdBalance = "0";
